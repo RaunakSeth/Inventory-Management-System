@@ -9,6 +9,12 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { callGeminiWithFallback } from "../_shared/gemini.ts";
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, X-Client-Info",
+};
+
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 
 const RESPONSE_SCHEMA = {
@@ -49,8 +55,12 @@ Rules:
 - Return ONLY the JSON matching the schema, no extra commentary.`;
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { status: 204, headers: CORS_HEADERS });
+  }
+
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
   }
 
   try {
@@ -58,7 +68,7 @@ serve(async (req) => {
     if (!image_base64) {
       return new Response(JSON.stringify({ error: "image_base64 is required" }), {
         status: 400,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
       });
     }
 
@@ -73,12 +83,12 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ ...geminiResult.json, _model_used: geminiResult.modelUsed }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
     );
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
   }
 });
