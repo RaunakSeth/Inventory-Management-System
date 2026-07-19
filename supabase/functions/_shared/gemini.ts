@@ -3,7 +3,13 @@
 // error body) it moves to the next model instead of failing the request.
 // Order is fastest/cheapest-first; each fallback is a small quality step
 // down, not a different capability tier.
-export const GEMINI_MODEL_FALLBACK_CHAIN = [
+// VISION models support image input; TEXT_ONLY models do not.
+export const GEMINI_VISION_CHAIN = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+];
+
+export const GEMINI_TEXT_ONLY_CHAIN = [
   "gemini-2.5-flash",
   "gemini-2.5-flash-lite",
   "gemini-2.0-flash",
@@ -13,11 +19,12 @@ export const GEMINI_MODEL_FALLBACK_CHAIN = [
 export async function callGeminiWithFallback(
   apiKey: string,
   parts: unknown[],
-  responseSchema: Record<string, unknown>
+  responseSchema: Record<string, unknown>,
+  modelChain: string[] = GEMINI_VISION_CHAIN
 ): Promise<{ modelUsed: string; json: any }> {
   let lastError: string | null = null;
 
-  for (const model of GEMINI_MODEL_FALLBACK_CHAIN) {
+  for (const model of modelChain) {
     try {
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,

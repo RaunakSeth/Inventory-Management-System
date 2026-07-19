@@ -1,64 +1,71 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
-interface Row {
+interface Product {
   id: string;
   name: string;
   category: string | null;
-  quantity: number;
-  unit: string;
-  min_quantity: number;
+  brand: string | null;
+  default_unit: string;
+  barcode: string | null;
 }
 
 export function Products() {
-  const [rows, setRows] = useState<Row[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     supabase
-      .from("stock_items")
-      .select("id, unit, quantity, min_quantity, product_library(name, category)")
-      .then(({ data }) => {
-        if (!data) return;
-        setRows(
-          data.map((r: any) => ({
-            id: r.id,
-            name: r.product_library?.name ?? "(unknown)",
-            category: r.product_library?.category ?? null,
-            quantity: r.quantity,
-            unit: r.unit,
-            min_quantity: r.min_quantity,
-          }))
-        );
+      .from("product_library")
+      .select("id, name, category, brand, default_unit, barcode", { count: "exact" })
+      .order("name")
+      .then(({ data, error }) => {
+        if (!error && data) setProducts(data as Product[]);
+        setLoading(false);
       });
   }, []);
 
-  const filtered = rows.filter((r) => r.name.toLowerCase().includes(search.toLowerCase()));
+  const filtered = search
+    ? products.filter((p) =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.brand && p.brand.toLowerCase().includes(search.toLowerCase())) ||
+        (p.category && p.category.toLowerCase().includes(search.toLowerCase()))
+      )
+    : products;
 
   return (
     <div className="p-4 space-y-3 max-w-2xl mx-auto">
-      <h1 className="text-lg font-semibold">Products</h1>
+      <h1 className="text-lg font-semibold">Product Library ({filtered.length})</h1>
       <input
-        placeholder="Search…"
+        placeholder="Search products..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="w-full rounded-lg bg-slate-800 px-3 py-2"
+        autoFocus
       />
-      {filtered.map((row) => (
-        <div key={row.id} className="rounded-lg bg-slate-900 p-3 flex justify-between">
-          <div>
-            <p className="font-medium">{row.name}</p>
-            <p className="text-xs text-slate-500">{row.category}</p>
+      {loading ? (
+        <p className="text-slate-500">Loading...</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-slate-500">
+          {search ? "No products match your search." : "No products yet. Scan a barcode to add the first one!"}
+        </p>
+      ) : (
+        filtered.map((p) => (
+          <div key={p.id} className="rounded-lg bg-slate-900 p-3 flex justify-between items-start">
+            <div className="min-w-0">
+              <p className="font-medium truncate">{p.name}</p>
+              <p className="text-xs text-slate-500">
+                {[p.category, p.brand].filter(Boolean).join(" · ") || null}
+              </p>
+              {p.barcode && (
+                <p className="text-xs text-slate-600 font-mono mt-1">#{p.barcode}</p>
+              )}
+            </div>
+            <span className="text-xs text-slate-500 shrink-0 ml-2">{p.default_unit}</span>
           </div>
-          <p
-            className={
-              row.quantity <= row.min_quantity ? "text-red-400" : "text-slate-300"
-            }
-          >
-            {row.quantity} {row.unit}
-          </p>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }
