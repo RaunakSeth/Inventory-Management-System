@@ -123,15 +123,15 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         .single();
       if (productErr) throw productErr;
 
-      const { error: stockErr } = await supabase.from("stock_items").insert({
+      const { data: stock, error: stockErr } = await supabase.from("stock_items").insert({
         product_id: product.id,
         unit,
         min_quantity: minQuantity,
-      });
+      }).select().single();
       if (stockErr) throw stockErr;
 
       await supabase.from("transactions").insert({
-        stock_item_id: product.id,
+        stock_item_id: stock.id,
         type: "restock",
         quantity_change: quantity,
         note: "Manual add",

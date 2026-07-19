@@ -3,10 +3,11 @@
 // error body) it moves to the next model instead of failing the request.
 // Order is fastest/cheapest-first; each fallback is a small quality step
 // down, not a different capability tier.
-// VISION models support image input; TEXT_ONLY models do not.
 export const GEMINI_VISION_CHAIN = [
   "gemini-2.5-flash",
   "gemini-2.0-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash-lite",
 ];
 
 export const GEMINI_TEXT_ONLY_CHAIN = [
@@ -22,51 +23,73 @@ export async function callGeminiWithFallback(
   responseSchema: Record<string, unknown>,
   modelChain: string[] = GEMINI_VISION_CHAIN
 ): Promise<{ modelUsed: string; json: any }> {
-  let lastError: string | null = null;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY is not set");
+  }
+
+  let lastError = null;
 
   for (const model of modelChain) {
     try {
+      const body = JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: formatSchema(responseSchema),
+        },
+      });
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              responseSchema,
-            },
-          }),
+          body,
         }
       );
 
       if (res.status === 429) {
         lastError = `${model}: rate limited (429)`;
-        continue; // try next model in the chain
+        continue;
       }
 
       if (!res.ok) {
         const errBody = await res.text();
-        // RESOURCE_EXHAUSTED can also arrive as a 400/403 with this string
-        // in the body depending on which quota was hit — treat it the same
-        // as a 429 and fall through to the next model.
         if (errBody.includes("RESOURCE_EXHAUSTED") || errBody.includes("quota")) {
-          lastError = `${model}: quota exhausted`;
+          lastError = `${model}: quota exhausted (${res.status})`;
           continue;
         }
-        throw new Error(`${model} error ${res.status}: ${errBody}`);
+        lastError = `${model}: error ${res.status}: ${errBody.slice(0, 500)}`;
+        continue;
       }
 
       const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "{}";
-      return { modelUsed: model, json: JSON.parse(text) };
+      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) {
+        lastError = `${model}: empty response (no text in candidates)`;
+        continue;
+      }
+
+      // Handle both plain JSON and markdown code-fenced JSON
+      const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
+      const json = JSON.parse(jsonStr);
+      return { modelUsed: model, json };
     } catch (err) {
       lastError = `${model}: ${err instanceof Error ? err.message : String(err)}`;
-      // network-level errors also fall through to the next model
       continue;
     }
   }
 
   throw new Error(`All Gemini models exhausted or failed. Last error: ${lastError}`);
+}
+
+// Format a loose JSON Schema with nullable booleans into a format Gemini expects.
+// Gemini's responseSchema does not accept a boolean for `nullable` in some versions.
+function formatSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(schema), (key, value) => {
+    if (key === "nullable" && typeof value === "boolean") {
+      return value ? "NULLABLE" : "NON_NULLABLE";
+    }
+    return value;
+  });
 }
