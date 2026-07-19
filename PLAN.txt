@@ -1,0 +1,178 @@
+PG INVENTORY MANAGEMENT SYSTEM — PROJECT PLAN & PROGRESS
+==========================================================
+Last updated: this session (see chat for exact date)
+
+
+CONTEXT
+-------
+Goal: a home/PG (paying-guest accommodation) inventory management system that
+lets staff scan a barcode to quickly add a single product to stock, or photo-
+scan a paper bill to bulk-add everything on it at once, with a growing shared
+product library (so repeat scans of the same item are instant), and a
+dashboard that flags what's running low before it actually runs out —
+ideally with a real usage-based estimate ("~3 days left"), not just a static
+threshold.
+
+Stack, as requested: Supabase (Postgres + Auth + Edge Functions) for the
+backend, React for the web frontend, and a phone as the scanner device
+(rather than a separate native app) via an installable PWA — so one codebase
+serves as both the management dashboard and the scanner, opened on a phone
+browser and "installed" to the home screen.
+
+We looked at forking an existing open-source project (HomeBox, Shelf.nu) per
+the original request. Verdict: their schemas are built for tracking unique
+serialized ASSETS with custody/booking/kit concepts (equipment loans,
+warranties), not CONSUMABLE stock with quantities that go up and down. Forking
+either would mean spending most effort stripping out irrelevant SaaS/asset-
+tracking machinery (Stripe billing, multi-tenant orgs, custody, bookings)
+rather than adding value. Decision: build fresh, but deliberately reuse two
+proven ideas from Shelf.nu — its quantity/minQuantity/unitOfMeasure/
+ConsumptionLog schema shape, and its browser-based (no native app) barcode
+scanning approach using a webcam + WASM barcode reader.
+
+Product data strategy: Zomato/BigBasket/Swiggy catalogs are proprietary and
+scraping them would violate their ToS — not used. Instead: Open Food Facts
+(free, open-licensed, barcode-keyed) as the primary lookup, with a Gemini
+vision fallback (photo -> product name/category/unit) for anything Open Food
+Facts doesn't have (common for loose produce, local/unbranded goods). Every
+lookup result is cached into our own product_library table, so the system's
+own catalog gets better and more complete the more it's used, specifically
+tailored to what this PG actually buys.
+
+LLM provider: Google Gemini (API key supplied by the user). Calls are made
+from Supabase Edge Functions, never from the browser, so the key is never
+exposed in the shipped frontend bundle. A fallback chain walks down through
+progressively lighter Gemini models (2.5-flash -> 2.5-flash-lite -> 2.0-flash
+-> 2.0-flash-lite) if a rate limit/quota error (429 / RESOURCE_EXHAUSTED) is
+hit on the current model, so a quota ceiling on one model doesn't stop the
+app from working.
+
+Where the code lives: originally built and verified (typecheck + production
+build both passing) in a sandboxed environment, then transferred to this
+machine at D:\pg-inventory. Node.js was not installed on this machine and was
+installed via winget (Node 24.18.0 LTS) to make that possible.
+
+
+SECURITY NOTE (important, read this)
+-------------------------------------
+The user pasted a Supabase SERVICE-ROLE key into chat. That key bypasses every
+Row-Level-Security policy in this project (full read/write/delete on all
+tables) and must NEVER be placed in the frontend .env (Vite bakes VITE_-
+prefixed variables directly into the JS bundle — anyone opening the deployed
+site in DevTools could read it out and get full admin access to the
+database). It was NOT used anywhere in this codebase. The frontend .env needs
+the ANON/PUBLIC key instead (Supabase Dashboard -> Settings -> API -> "anon
+public"; decode the JWT and it will say "role":"anon", not "role":
+"service_role"). Recommended: rotate the service-role key from that same
+Settings -> API page since it was typed into a chat session, as routine
+hygiene for a key that powerful.
+
+
+TASKS
+-----
+
+[Planning & architecture]
+[X] Evaluate forking HomeBox / Shelf.nu vs building fresh — decided to build
+    fresh, reusing schema + scanning-approach ideas only
+[X] Choose product-data sourcing strategy (Open Food Facts + Gemini vision
+    fallback + self-growing catalog; explicitly ruled out scraping
+    Zomato/BigBasket/Swiggy/FSSAI as proprietary/ToS-violating)
+[X] Choose scanner form factor: installable PWA on phone, not a separate
+    native app
+
+[Database schema — supabase/migrations/]
+[X] 0001_init.sql — core tables: locations, product_library, stock_items,
+    transactions (immutable ledger — quantity is always derived, never
+    hand-edited), bills, bill_line_items; a trigger that keeps stock_items
+    .quantity in sync with the transaction ledger automatically; a
+    low_stock_items view (flags at/below reorder threshold OR projected to
+    run out within ~3 days); RLS policies (shared-household model — any
+    signed-in user has full access, no per-role permissions, appropriate for
+    a small PG staff)
+[X] 0002_consumption_rate.sql — recompute_consumption_rates() function,
+    computes a rolling 30-day average daily usage per stock item (this is
+    what powers the "~N days left" estimate)
+[ ] Enable pg_cron extension in the Supabase dashboard and schedule
+    recompute_consumption_rates() to run nightly (SQL is written and
+    commented-out at the bottom of 0002, just needs pg_cron turned on once)
+[X] 0003_fuzzy_match.sql — match_product_by_name() RPC using pg_trgm
+    similarity, used to auto-suggest a product match for each parsed bill
+    line item
+[ ] Run all three migration files against the live Supabase project (SQL
+    Editor, in order) — BLOCKED, see "Blockers" below
+
+[Backend — supabase/functions/ (Deno edge functions)]
+[X] gemini-bill-parse — bill photo -> structured JSON of line items
+    (vendor, total, per-item name/qty/unit/price)
+[X] product-lookup — barcode -> Open Food Facts lookup
+[X] product-identify-photo — Gemini vision fallback when a barcode isn't
+    found in Open Food Facts
+[X] _shared/gemini.ts — shared fallback-chain caller (2.5-flash ->
+    2.5-flash-lite -> 2.0-flash -> 2.0-flash-lite on 429/quota errors),
+    wired into both Gemini-calling functions
+[X] Verified the supplied Gemini API key is valid and listed the actual
+    models available on this account/key (confirmed all four fallback-chain
+    model names exist)
+[ ] Deploy all three edge functions to the live Supabase project (needs
+    `supabase login` / `supabase link` / `supabase functions deploy` x3) —
+    BLOCKED, see "Blockers" below
+[ ] Set the GEMINI_API_KEY secret on the Supabase project
+    (`supabase secrets set GEMINI_API_KEY=...`) — BLOCKED, see "Blockers"
+    below
+
+[Frontend — src/]
+[X] Supabase client singleton (src/lib/supabase.ts)
+[X] Shared TS types matching the DB schema (src/lib/types.ts)
+[X] Edge-function client wrappers (src/lib/edgeFunctions.ts)
+[X] BarcodeScanner component (react-zxing, rear camera, continuous decode)
+[X] BillScanner component (react-webcam capture -> Gemini parse -> editable
+    review list with per-row include/exclude -> confirm posts transactions)
+[X] ProductQuickAdd component (barcode -> Open Food Facts lookup -> confirm
+    form; falls back to a photo-identify step if not found; upserts into
+    product_library keyed on barcode so the next scan is instant)
+[X] Dashboard page (low-stock / needs-refilling list, sorted by estimated
+    days remaining)
+[X] Products page (browse/search current stock levels)
+[X] Scan page (toggle between barcode mode and bill mode)
+[X] AuthGate component (Supabase magic-link email sign-in, wraps the whole
+    app — required because RLS policies require an authenticated session)
+[X] PWA config (vite-plugin-pwa, installable manifest, app-shell caching
+    only — API responses deliberately NOT cached so scans never serve
+    stale data offline)
+[X] Typecheck passes clean (tsc -b)
+[X] Production build passes clean (vite build)
+
+[Local machine setup — this machine, D:\pg-inventory]
+[X] Installed Node.js LTS (24.18.0) via winget (was not present before)
+[X] npm install completed (433 packages, no blocking errors)
+[X] npm run build verified working locally
+[X] Dev server started and confirmed serving (http://localhost:5173,
+    also reachable on LAN at http://192.168.0.103:5173 — note: camera
+    access will NOT work over that plain-HTTP LAN address, HTTPS or
+    localhost only; see README.md "Testing the camera on your phone")
+[X] .env created from .env.example (currently placeholder values only)
+[X] Pushed updated gemini-bill-parse, product-identify-photo, and the new
+    _shared/gemini.ts (model-fallback logic) onto this machine's copy of
+    the project, on top of what was originally unzipped here
+
+[Deployment / going live]
+[X] Get the real Supabase ANON/PUBLIC key into .env (VITE_SUPABASE_ANON_KEY)
+    — safe to expose client-side, this is what RLS is designed to gate
+[X] Run the 3 SQL migrations against the live project
+[X] Deploy the 3 edge functions + set the GEMINI_API_KEY secret
+[X] Enable pg_cron and schedule the nightly consumption-rate recompute
+    (scheduled: cron.schedule('recompute-consumption-rates', '0 3 * * *', ...))
+[ ] Deploy frontend to Netlify (netlify.toml ready — needs Netlify auth to
+    deploy, requires user to connect repo or use Netlify CLI login)
+
+[Explicitly deferred — not started, by design, so the core loop gets
+ validated before adding more surface area]
+[ ] Multiple locations in the UI (schema already supports it — kitchen
+    store vs cleaning cupboard, etc. — just no UI to create/assign locations
+    yet)
+[ ] Push notifications for low stock (WhatsApp/Telegram/email webhook off
+    the low_stock_items view) — currently pull-only (open the dashboard)
+[ ] Multi-property / multi-household support (would need a household_id
+    column threaded through every table + RLS scoped to it)
+[ ] Bulk CSV import for the very first stock-take (typing in everything
+    already owned once, instead of scanning item by item)

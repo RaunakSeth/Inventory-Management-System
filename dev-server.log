@@ -1,0 +1,17 @@
+
+> pg-inventory@0.1.0 dev
+> vite
+
+
+  VITE v5.4.21  ready in 286 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.0.103:5173/
+  ➜  press h + enter to show help
+12:47:05 pm [vite] .env changed, restarting server...
+12:47:05 pm [vite] server restarted.
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.0.109:5173/
+1:31:03 pm [vite] .env changed, restarting server...
+1:31:03 pm [vite] server restarted.
