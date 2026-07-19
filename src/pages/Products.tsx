@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { Package, Search, Barcode, Filter } from "lucide-react";
+import { Package, Search, Barcode, Trash2, AlertCircle } from "lucide-react";
 
 interface Product {
   id: string;
@@ -19,17 +19,37 @@ export function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  async function fetchProducts() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("product_library")
+      .select("id, name, category, brand, default_unit, barcode, image_url")
+      .order("name");
+    if (!error && data) setProducts(data as Product[]);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    supabase
-      .from("product_library")
-      .select("id, name, category, brand, default_unit, barcode, image_url", { count: "exact" })
-      .order("name")
-      .then(({ data, error }) => {
-        if (!error && data) setProducts(data as Product[]);
-        setLoading(false);
-      });
+    fetchProducts();
   }, []);
+
+  async function deleteProduct(id: string) {
+    setErrorMsg(null);
+    const { error } = await supabase.from("product_library").delete().eq("id", id);
+    if (error) {
+      if (error.message.includes("foreign key")) {
+        setErrorMsg("This product has stock entries. Delete them from Dashboard first.");
+      } else {
+        setErrorMsg(error.message);
+      }
+    } else {
+      setConfirmDelete(null);
+      fetchProducts();
+    }
+  }
 
   const filtered = search
     ? products.filter((p) =>
@@ -48,6 +68,14 @@ export function Products() {
           {products.length}
         </span>
       </div>
+
+      {errorMsg && (
+        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -75,43 +103,70 @@ export function Products() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((p) => (
-            <div
-              key={p.id}
-              className="rounded-xl bg-slate-900/80 p-3 flex items-center gap-3 border border-slate-800/50 hover:border-slate-700 transition"
-            >
-              <div className="w-12 h-12 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                {p.image_url ? (
-                  <img
-                    src={p.image_url}
-                    alt={p.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = FALLBACK_IMG;
-                    }}
-                  />
-                ) : (
-                  <img src={FALLBACK_IMG} alt="" className="w-6 h-6 opacity-50" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">{p.name}</p>
-                <p className="text-xs text-slate-500 truncate">
-                  {[p.category, p.brand].filter(Boolean).join(" · ") || "\u00a0"}
-                </p>
-                {p.barcode && (
-                  <p className="text-[10px] text-slate-600 font-mono mt-0.5 flex items-center gap-1">
-                    <Barcode className="w-3 h-3" />
-                    {p.barcode}
+          {filtered.map((p) => {
+            if (confirmDelete === p.id) {
+              return (
+                <div key={p.id} className="rounded-xl bg-red-900/20 border border-red-800/30 p-4">
+                  <p className="text-sm font-medium text-red-400">Delete "{p.name}"?</p>
+                  <p className="text-xs text-red-400/70 mt-1">
+                    This also removes the product from your library. Stock entries for this product are also deleted.
                   </p>
-                )}
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={() => deleteProduct(p.id)} className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-medium hover:bg-red-400 transition">
+                      Delete
+                    </button>
+                    <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:bg-slate-700 transition">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div
+                key={p.id}
+                className="rounded-xl bg-slate-900/80 p-3 flex items-center gap-3 border border-slate-800/50 hover:border-slate-700 transition"
+              >
+                <div className="w-12 h-12 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMG; }}
+                    />
+                  ) : (
+                    <img src={FALLBACK_IMG} alt="" className="w-6 h-6 opacity-50" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{p.name}</p>
+                  <p className="text-xs text-slate-500 truncate">
+                    {[p.category, p.brand].filter(Boolean).join(" · ") || "\u00a0"}
+                  </p>
+                  {p.barcode && (
+                    <p className="text-[10px] text-slate-600 font-mono mt-0.5 flex items-center gap-1">
+                      <Barcode className="w-3 h-3" />
+                      {p.barcode}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">
+                    {p.default_unit}
+                  </span>
+                  <button
+                    onClick={() => setConfirmDelete(p.id)}
+                    className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-red-900/50 transition"
+                    title="Delete product"
+                  >
+                    <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-400" />
+                  </button>
+                </div>
               </div>
-              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded shrink-0">
-                {p.default_unit}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

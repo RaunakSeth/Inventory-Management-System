@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { AlertTriangle, Clock, Package, Plus, Minus, RotateCcw, ImageIcon } from "lucide-react";
+import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle } from "lucide-react";
 
 interface StockRow {
   stock_item_id: string;
@@ -26,6 +26,8 @@ export function Dashboard() {
   const [editQty, setEditQty] = useState<number>(0);
   const [editUnit, setEditUnit] = useState<string>("pcs");
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function fetchStock() {
     setLoading(true);
@@ -42,10 +44,8 @@ export function Dashboard() {
       setRows(
         (data as any[]).map((r) => {
           const qty = r.quantity;
-          const minQty = r.min_quantity;
           const avg = r.avg_daily_consumption;
-          const daysLeft =
-            avg && avg > 0 ? Math.round((qty / avg) * 10) / 10 : null;
+          const daysLeft = avg && avg > 0 ? Math.round((qty / avg) * 10) / 10 : null;
           return {
             stock_item_id: r.id,
             product_id: r.product_id,
@@ -53,7 +53,7 @@ export function Dashboard() {
             category: r.product_library?.category ?? null,
             quantity: qty,
             unit: r.unit,
-            min_quantity: minQty,
+            min_quantity: r.min_quantity,
             avg_daily_consumption: avg,
             estimated_days_remaining: daysLeft,
             location_name: r.locations?.name ?? null,
@@ -76,6 +76,7 @@ export function Dashboard() {
   );
 
   function startEdit(row: StockRow) {
+    setErrorMsg(null);
     setEditingId(row.stock_item_id);
     setEditQty(row.quantity);
     setEditUnit(row.unit);
@@ -83,24 +84,34 @@ export function Dashboard() {
 
   function cancelEdit() {
     setEditingId(null);
+    setErrorMsg(null);
   }
 
   async function saveEdit(row: StockRow) {
     setSaving(true);
+    setErrorMsg(null);
     const diff = editQty - row.quantity;
     if (diff !== 0) {
-      await supabase.from("transactions").insert({
+      const { error } = await supabase.from("transactions").insert({
         stock_item_id: row.stock_item_id,
         type: "adjustment",
         quantity_change: diff,
         note: "Manual adjustment from dashboard",
       });
+      if (error) {
+        if (error.message.includes("Insufficient stock") || error.message.includes("violates row-level security")) {
+          setErrorMsg(
+            `Cannot go below 0. Current stock: ${row.quantity} ${row.unit}. Use a restock first or set a higher quantity.`
+          );
+        } else {
+          setErrorMsg(error.message);
+        }
+        setSaving(false);
+        return;
+      }
     }
     if (editUnit !== row.unit) {
-      await supabase
-        .from("stock_items")
-        .update({ unit: editUnit })
-        .eq("id", row.stock_item_id);
+      await supabase.from("stock_items").update({ unit: editUnit }).eq("id", row.stock_item_id);
     }
     setSaving(false);
     setEditingId(null);
@@ -108,13 +119,33 @@ export function Dashboard() {
   }
 
   async function quickAdjust(row: StockRow, delta: number) {
-    await supabase.from("transactions").insert({
+    setErrorMsg(null);
+    const { error } = await supabase.from("transactions").insert({
       stock_item_id: row.stock_item_id,
       type: delta > 0 ? "restock" : "usage",
       quantity_change: delta,
       note: delta > 0 ? "Quick restock" : "Quick usage",
     });
-    fetchStock();
+    if (error) {
+      if (error.message.includes("Insufficient stock")) {
+        setErrorMsg(`Cannot use ${Math.abs(delta)} — only ${row.quantity} ${row.unit} available.`);
+      } else {
+        setErrorMsg(error.message);
+      }
+    } else {
+      fetchStock();
+    }
+  }
+
+  async function deleteStockItem(stockItemId: string) {
+    setErrorMsg(null);
+    const { error } = await supabase.from("stock_items").delete().eq("id", stockItemId);
+    if (error) {
+      setErrorMsg(error.message);
+    } else {
+      setConfirmDelete(null);
+      fetchStock();
+    }
   }
 
   return (
@@ -128,6 +159,14 @@ export function Dashboard() {
           </span>
         )}
       </div>
+
+      {errorMsg && (
+        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -143,7 +182,6 @@ export function Dashboard() {
         </div>
       ) : (
         <>
-          {/* Low stock alert section */}
           {lowRows.length > 0 && (
             <div className="space-y-2">
               {lowRows.map((row) => (
@@ -160,18 +198,21 @@ export function Dashboard() {
                   onCancelEdit={cancelEdit}
                   onSaveEdit={() => saveEdit(row)}
                   onQuickAdjust={(d) => quickAdjust(row, d)}
+                  onDelete={() => setConfirmDelete(row.stock_item_id)}
                   saving={saving}
+                  confirmDelete={confirmDelete}
+                  onConfirmDelete={() => deleteStockItem(row.stock_item_id)}
+                  onCancelDelete={() => setConfirmDelete(null)}
                 />
               ))}
             </div>
           )}
 
-          {/* All stock section */}
           <details className="group">
             <summary className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer hover:text-slate-300 transition py-2">
               <Package className="w-4 h-4" />
               All Stock ({rows.length})
-              <RotateCcw className="w-3 h-3 ml-auto group-open:rotate-180 transition" />
+              <Plus className="w-3 h-3 ml-auto group-open:rotate-45 transition" />
             </summary>
             <div className="space-y-2 mt-2">
               {rows.map((row) => (
@@ -188,7 +229,11 @@ export function Dashboard() {
                   onCancelEdit={cancelEdit}
                   onSaveEdit={() => saveEdit(row)}
                   onQuickAdjust={(d) => quickAdjust(row, d)}
+                  onDelete={() => setConfirmDelete(row.stock_item_id)}
                   saving={saving}
+                  confirmDelete={confirmDelete}
+                  onConfirmDelete={() => deleteStockItem(row.stock_item_id)}
+                  onCancelDelete={() => setConfirmDelete(null)}
                 />
               ))}
             </div>
@@ -211,7 +256,11 @@ function StockCard({
   onCancelEdit,
   onSaveEdit,
   onQuickAdjust,
+  onDelete,
   saving,
+  confirmDelete,
+  onConfirmDelete,
+  onCancelDelete,
 }: {
   row: StockRow;
   isLow: boolean;
@@ -224,11 +273,35 @@ function StockCard({
   onCancelEdit: () => void;
   onSaveEdit: () => void;
   onQuickAdjust: (d: number) => void;
+  onDelete: () => void;
   saving: boolean;
+  confirmDelete: string | null;
+  onConfirmDelete: () => void;
+  onCancelDelete: () => void;
 }) {
   const isEditing = editingId === row.stock_item_id;
+  const isDeleting = confirmDelete === row.stock_item_id;
   const isUrgent = row.estimated_days_remaining !== null && row.estimated_days_remaining <= 2;
   const isWarning = row.estimated_days_remaining !== null && row.estimated_days_remaining > 2;
+
+  if (isDeleting) {
+    return (
+      <div className="rounded-xl bg-red-900/20 border border-red-800/30 p-4">
+        <p className="text-sm font-medium text-red-400">Delete "{row.product_name}"?</p>
+        <p className="text-xs text-red-400/70 mt-1">
+          This will permanently remove the stock entry. Transactions are preserved.
+        </p>
+        <div className="flex gap-2 mt-3">
+          <button onClick={onConfirmDelete} className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-medium hover:bg-red-400 transition">
+            Delete
+          </button>
+          <button onClick={onCancelDelete} className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:bg-slate-700 transition">
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -267,6 +340,7 @@ function StockCard({
             <input
               type="number"
               step="any"
+              min="0"
               value={editQty}
               onChange={(e) => setEditQty(Number(e.target.value))}
               className="w-16 rounded bg-slate-800 px-2 py-1 text-sm text-right border border-slate-700"
@@ -283,12 +357,10 @@ function StockCard({
             >
               {saving ? "..." : "Save"}
             </button>
-            <button onClick={onCancelEdit} className="text-xs text-slate-500 px-1">
-              X
-            </button>
+            <button onClick={onCancelEdit} className="text-xs text-slate-500 px-1">X</button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => onQuickAdjust(-1)}
               className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"
@@ -306,6 +378,13 @@ function StockCard({
               title="Add 1"
             >
               <Plus className="w-3 h-3 text-slate-400" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-red-900/50 transition ml-1"
+              title="Delete item"
+            >
+              <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-400" />
             </button>
           </div>
         )}
