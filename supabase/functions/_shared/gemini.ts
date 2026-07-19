@@ -4,15 +4,15 @@
 // Order is fastest/cheapest-first; each fallback is a small quality step
 // down, not a different capability tier.
 export const GEMINI_VISION_CHAIN = [
-  "gemini-2.5-flash",
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
   "gemini-2.0-flash",
-  "gemini-2.5-flash-lite",
   "gemini-2.0-flash-lite",
 ];
 
 export const GEMINI_TEXT_ONLY_CHAIN = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-flash-latest",
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
 ];
