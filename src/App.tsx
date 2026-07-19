@@ -2,12 +2,16 @@ import { HashRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import { Dashboard } from "./pages/Dashboard";
 import { Products } from "./pages/Products";
 import { Scan } from "./pages/Scan";
-import { LayoutDashboard, ScanLine, Package } from "lucide-react";
+import { Activity } from "./pages/Activity";
+import { Locations } from "./pages/Locations";
+import { LayoutDashboard, ScanLine, Package, History, MapPin } from "lucide-react";
 
 const tabs = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/scan", label: "Scan", icon: ScanLine },
   { to: "/products", label: "Products", icon: Package },
+  { to: "/activity", label: "Activity", icon: History },
+  { to: "/locations", label: "Locations", icon: MapPin },
 ];
 
 function BottomNav() {
@@ -42,6 +46,8 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/scan" element={<Scan />} />
           <Route path="/products" element={<Products />} />
+          <Route path="/activity" element={<Activity />} />
+          <Route path="/locations" element={<Locations />} />
         </Routes>
         <BottomNav />
       </div>

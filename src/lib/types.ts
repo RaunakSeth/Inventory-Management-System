@@ -10,6 +10,14 @@ export interface Product {
   pack_size: number | null;
   image_url: string | null;
   source: ProductSource;
+  description?: string | null;
+}
+
+export interface Location {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  created_at: string;
 }
 
 export interface StockItem {

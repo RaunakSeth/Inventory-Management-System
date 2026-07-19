@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History } from "lucide-react";
+import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin } from "lucide-react";
+import type { Location } from "../lib/types";
 
 interface StockRow {
   stock_item_id: string;
@@ -17,7 +18,7 @@ interface StockRow {
 }
 
 const FALLBACK_IMG =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'%3E%3C/path%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'%3E%3C/polyline%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'%3E%3C/line%3E%3C/svg%3E";
+  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'%3E%3C/polyline%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'%3E%3C/polyline%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'%3E%3C/line%3E%3C/svg%3E";
 
 export function Dashboard() {
   const [rows, setRows] = useState<StockRow[]>([]);
@@ -29,6 +30,8 @@ export function Dashboard() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [allLocations, setAllLocations] = useState<Location[]>([]);
+  const [activatingLocation, setActivatingLocation] = useState<string | null>(null);
 
   async function fetchStock() {
     setLoading(true);
@@ -66,6 +69,11 @@ export function Dashboard() {
     setLoading(false);
   }
 
+  async function fetchLocations() {
+    const { data } = await supabase.from("locations").select("*").order("name");
+    if (data) setAllLocations(data as Location[]);
+  }
+
   async function fetchRecentTransactions() {
     const { data } = await supabase
       .from("transactions")
@@ -81,6 +89,7 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchStock();
+    fetchLocations();
     fetchRecentTransactions();
   }, []);
 
@@ -143,7 +152,7 @@ export function Dashboard() {
     });
     if (error) {
       if (error.message.includes("Insufficient stock")) {
-        setErrorMsg(`Cannot use ${Math.abs(delta)} — only ${row.quantity} ${row.unit} available.`);
+        setErrorMsg(`Cannot use ${Math.abs(delta)} - only ${row.quantity} ${row.unit} available.`);
       } else {
         setErrorMsg(error.message);
       }
@@ -161,6 +170,15 @@ export function Dashboard() {
       setConfirmDelete(null);
       fetchStock();
     }
+  }
+
+  async function assignLocation(stockItemId: string, locationId: string | null) {
+    setActivatingLocation(stockItemId);
+    setErrorMsg(null);
+    const {error} = await supabase.from("stock_items").update({location_id: locationId}).eq("id", stockItemId);
+    if (error) setErrorMsg(error.message);
+    setActivatingLocation(null);
+    fetchStock();
   }
 
   return (
@@ -218,6 +236,9 @@ export function Dashboard() {
                   confirmDelete={confirmDelete}
                   onConfirmDelete={() => deleteStockItem(row.stock_item_id)}
                   onCancelDelete={() => setConfirmDelete(null)}
+                  locations={allLocations}
+                  onAssignLocation={(locId) => assignLocation(row.stock_item_id, locId)}
+                  activatingLocation={activatingLocation}
                 />
               ))}
             </div>
@@ -249,6 +270,9 @@ export function Dashboard() {
                   confirmDelete={confirmDelete}
                   onConfirmDelete={() => deleteStockItem(row.stock_item_id)}
                   onCancelDelete={() => setConfirmDelete(null)}
+                  locations={allLocations}
+                  onAssignLocation={(locId) => assignLocation(row.stock_item_id, locId)}
+                  activatingLocation={activatingLocation}
                 />
               ))}
             </div>
@@ -278,7 +302,7 @@ export function Dashboard() {
                         <p className="text-sm truncate">{p?.name ?? "(unknown)"}</p>
                         <p className="text-[10px] text-slate-600 truncate">{t.note || t.type}</p>
                       </div>
-                      <p className={`text-sm font-mono ${icon}`}>
+                      <p className={"text-sm font-mono " + icon}>
                         {label}{t.quantity_change}
                       </p>
                     </div>
@@ -310,6 +334,9 @@ function StockCard({
   confirmDelete,
   onConfirmDelete,
   onCancelDelete,
+  locations,
+  onAssignLocation,
+  activatingLocation,
 }: {
   row: StockRow;
   isLow: boolean;
@@ -327,6 +354,9 @@ function StockCard({
   confirmDelete: string | null;
   onConfirmDelete: () => void;
   onCancelDelete: () => void;
+  locations: Location[];
+  onAssignLocation: (locationId: string | null) => void;
+  activatingLocation: string | null;
 }) {
   const isEditing = editingId === row.stock_item_id;
   const isDeleting = confirmDelete === row.stock_item_id;
@@ -354,13 +384,13 @@ function StockCard({
 
   return (
     <div
-      className={`rounded-xl border overflow-hidden ${
+      className={"rounded-xl border overflow-hidden " + (
         isLow && isUrgent
           ? "bg-red-900/20 border-red-800/30"
           : isLow && isWarning
           ? "bg-amber-900/20 border-amber-800/30"
           : "bg-slate-900/80 border-slate-800/50"
-      }`}
+      )}
     >
       <div className="p-3 flex items-center gap-3">
         <div className="w-10 h-10 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
@@ -439,12 +469,30 @@ function StockCard({
         )}
       </div>
 
-      {!isEditing && row.estimated_days_remaining !== null && (
-        <div className="px-3 pb-2 flex items-center gap-1.5">
-          <Clock className={`w-3 h-3 ${isUrgent ? "text-red-400" : "text-amber-400"}`} />
-          <span className={`text-xs ${isUrgent ? "text-red-400" : "text-amber-400"}`}>
-            ~{row.estimated_days_remaining < 1 ? "<1" : row.estimated_days_remaining} day
-            {row.estimated_days_remaining !== 1 ? "s" : ""} left
+      {!isEditing && (
+        <div className="px-3 pb-2 flex items-center gap-2 flex-wrap">
+          {row.estimated_days_remaining !== null && (
+            <span className={"text-xs flex items-center gap-1 " + (isUrgent ? "text-red-400" : "text-amber-400")}>
+              <Clock className="w-3 h-3" />
+              ~{row.estimated_days_remaining < 1 ? "<1" : row.estimated_days_remaining} day{row.estimated_days_remaining !== 1 ? "s" : ""} left
+            </span>
+          )}
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <MapPin className="w-3 h-3" />
+            {activatingLocation === row.stock_item_id ? (
+              <span className="text-slate-400">Saving...</span>
+            ) : (
+              <select
+                value={row.location_name ? row.location_name : ""}
+                onChange={(e) => onAssignLocation(e.target.value || null)}
+                className="bg-transparent border-none text-xs text-slate-400 cursor-pointer outline-none"
+              >
+                <option value="">{row.location_name || "No location"}</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id} selected={row.location_name === l.name}>{l.name}</option>
+                ))}
+              </select>
+            )}
           </span>
         </div>
       )}
