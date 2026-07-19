@@ -83,13 +83,7 @@ export async function callGeminiWithFallback(
   throw new Error(`All Gemini models exhausted or failed. Last error: ${lastError}`);
 }
 
-// Format a loose JSON Schema with nullable booleans into a format Gemini expects.
-// Gemini's responseSchema does not accept a boolean for `nullable` in some versions.
+// Gemini's responseSchema" nullable is just a plain boolean, pass through as-is.
 function formatSchema(schema: Record<string, unknown>): Record<string, unknown> {
-  return JSON.parse(JSON.stringify(schema), (key, value) => {
-    if (key === "nullable" && typeof value === "boolean") {
-      return value ? "NULLABLE" : "NON_NULLABLE";
-    }
-    return value;
-  });
+  return schema;
 }
