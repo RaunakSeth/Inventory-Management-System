@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle } from "lucide-react";
+import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History } from "lucide-react";
 
 interface StockRow {
   stock_item_id: string;
@@ -28,6 +28,7 @@ export function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
 
   async function fetchStock() {
     setLoading(true);
@@ -65,8 +66,22 @@ export function Dashboard() {
     setLoading(false);
   }
 
+  async function fetchRecentTransactions() {
+    const { data } = await supabase
+      .from("transactions")
+      .select(`
+        id, type, quantity_change, created_at, note,
+        stock_item_id,
+        stock_items!inner(product_id, product_library!inner(name, image_url))
+      `)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    if (data) setRecentTransactions(data as any[]);
+  }
+
   useEffect(() => {
     fetchStock();
+    fetchRecentTransactions();
   }, []);
 
   const lowRows = rows.filter(
@@ -238,6 +253,40 @@ export function Dashboard() {
               ))}
             </div>
           </details>
+
+          {recentTransactions.length > 0 && (
+            <details className="group" open>
+              <summary className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer hover:text-slate-300 transition py-2">
+                <History className="w-4 h-4" />
+                Recent Activity
+              </summary>
+              <div className="space-y-1 mt-2">
+                {recentTransactions.map((t: any) => {
+                  const p = t.stock_items?.product_library;
+                  const icon = t.type === "restock" || t.quantity_change > 0 ? "text-emerald-400" : "text-red-400";
+                  const label = t.quantity_change > 0 ? "+" : "";
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-800/30">
+                      <div className="w-8 h-8 rounded bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+                        {p?.image_url ? (
+                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <img src={FALLBACK_IMG} alt="" className="w-4 h-4 opacity-50" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm truncate">{p?.name ?? "(unknown)"}</p>
+                        <p className="text-[10px] text-slate-600 truncate">{t.note || t.type}</p>
+                      </div>
+                      <p className={`text-sm font-mono ${icon}`}>
+                        {label}{t.quantity_change}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
+          )}
         </>
       )}
     </div>
