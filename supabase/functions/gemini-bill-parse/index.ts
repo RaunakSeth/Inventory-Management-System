@@ -1,21 +1,15 @@
-// Supabase Edge Function (Deno). Deploy with:
-//   supabase functions deploy gemini-bill-parse
-//
-// Supports user-provided AI credentials via headers:
-//   X-AI-Provider: gemini | openai_compatible
-//   X-AI-Api-Key: user's API key
-//   X-AI-Base-Url: for OpenAI-compatible endpoints
-//   X-AI-Model: model to use
-//
-// Falls back to server-side GEMINI_API_KEY if no user credentials.
+// Supabase Edge Function (Deno): Bill photo parsing
+// Fetches user's AI credentials from user_settings table
+// Falls back to server-side GEMINI_API_KEY if no user credentials
 
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callGeminiWithFallback, GEMINI_VISION_CHAIN } from "../_shared/gemini.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, X-Client-Info, X-AI-Provider, X-AI-Api-Key, X-AI-Base-Url, X-AI-Model",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, X-Client-Info",
 };
 
 const SERVER_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -123,22 +117,42 @@ serve(async (req) => {
       });
     }
 
-    const aiProvider = req.headers.get("X-AI-Provider") ?? "gemini";
-    const aiApiKey = req.headers.get("X-AI-Api-Key") ?? SERVER_GEMINI_KEY;
-    const aiBaseUrl = req.headers.get("X-AI-Base-Url") ?? "";
-    const aiModel = req.headers.get("X-AI-Model") ?? GEMINI_VISION_CHAIN[0];
+    // Get user from JWT
+    const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
+    let aiProvider = "gemini";
+    let aiApiKey = SERVER_GEMINI_KEY;
+    let aiBaseUrl = "";
+    let aiModel = GEMINI_VISION_CHAIN[0];
+
+    if (jwt) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: `Bearer ${jwt}` } } }
+      );
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: settings } = await supabase
+          .from("user_settings")
+          .select("ai_provider, ai_api_key, ai_base_url, ai_model, oauth_provider, oauth_access_token")
+          .eq("user_id", user.id)
+          .single();
+
+        if (settings) {
+          aiProvider = settings.oauth_provider ?? settings.ai_provider ?? "gemini";
+          aiApiKey = settings.oauth_access_token ?? settings.ai_api_key ?? SERVER_GEMINI_KEY;
+          aiBaseUrl = settings.ai_base_url ?? "";
+          aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
+        }
+      }
+    }
 
     let result: { modelUsed: string; json: any };
 
     if (aiProvider === "openai_compatible" && aiBaseUrl) {
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT, RESPONSE_SCHEMA);
-    } else {
-      if (!aiApiKey) {
-        return new Response(JSON.stringify({ error: "No API key configured. Set one in Settings." }), {
-          status: 400,
-          headers: { "Content-Type": "application/json", ...CORS_HEADERS },
-        });
-      }
+    } else if (aiApiKey) {
       result = await callGeminiWithFallback(
         aiApiKey,
         [
@@ -148,6 +162,11 @@ serve(async (req) => {
         RESPONSE_SCHEMA,
         aiProvider === "gemini" ? [aiModel, ...GEMINI_VISION_CHAIN.filter((m) => m !== aiModel)] : GEMINI_VISION_CHAIN,
       );
+    } else {
+      return new Response(JSON.stringify({ error: "No AI configured. Connect a provider in Settings." }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+      });
     }
 
     return new Response(
