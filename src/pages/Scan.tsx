@@ -74,6 +74,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
   const [quantity, setQuantity] = useState(1);
   const [minQuantity, setMinQuantity] = useState(1);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [bestBeforeDate, setBestBeforeDate] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const webcamRef = useRef<Webcam>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -127,6 +128,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         product_id: product.id,
         unit,
         min_quantity: minQuantity,
+        best_before_date: bestBeforeDate || null,
       }).select().single();
       if (stockErr) throw stockErr;
 
@@ -138,7 +140,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
       });
 
       onDone();
-      setName(""); setCategory(""); setBrand(""); setImageUrl(null);
+      setName(""); setCategory(""); setBrand(""); setImageUrl(null); setBestBeforeDate("");
       setQuantity(1); setMinQuantity(1); setUnit("pcs");
       setStage("form");
     } catch (err) {
@@ -209,6 +211,16 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
           />
         </label>
       </div>
+
+      <label className="block text-sm">
+        Best before (optional)
+        <input
+          type="date"
+          className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+          value={bestBeforeDate}
+          onChange={(e) => setBestBeforeDate(e.target.value)}
+        />
+      </label>
 
       <div className="space-y-1">
         <p className="text-sm text-slate-400">Photo (optional)</p>

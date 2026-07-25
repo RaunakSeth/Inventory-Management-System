@@ -265,8 +265,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <Package className="w-8 h-8 text-emerald-400" />
           </div>
-          <h1 className="text-2xl font-bold">PG Inventory</h1>
-          <p className="text-sm text-slate-500 mt-1">Sign in to manage your stock</p>
+          <h1 className="text-2xl font-bold">Inventory Manager</h1>
+          <p className="text-sm text-slate-500 mt-1">Track stock, shopping, and supplies</p>
         </div>
 
         {mode === "magic_link_sent" ? (

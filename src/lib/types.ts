@@ -11,6 +11,7 @@ export interface Product {
   image_url: string | null;
   source: ProductSource;
   description?: string | null;
+  product_group_id?: string | null;
 }
 
 export interface Location {
@@ -29,6 +30,8 @@ export interface StockItem {
   min_quantity: number;
   avg_daily_consumption: number | null;
   last_restocked_at: string | null;
+  best_before_date?: string | null;
+  opened_at?: string | null;
 }
 
 export interface LowStockRow {
@@ -68,4 +71,35 @@ export interface ProductLookupResult {
   pack_size_raw?: string | null;
   likely_unit?: string;
   confidence?: number;
+}
+
+export interface QuantityUnit {
+  id: string;
+  name: string;
+  name_plural: string | null;
+  factor_to_base: number;
+  base_unit_id: string | null;
+}
+
+export interface ProductGroup {
+  id: string;
+  name: string;
+  parent_id: string | null;
+}
+
+export interface Store {
+  id: string;
+  name: string;
+  address: string | null;
+}
+
+export interface ShoppingListItem {
+  id: string;
+  product_id: string | null;
+  custom_name: string | null;
+  quantity: number;
+  unit: string;
+  note: string | null;
+  done: boolean;
+  created_at: string;
 }

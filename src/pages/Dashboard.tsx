@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin } from "lucide-react";
+import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar } from "lucide-react";
 import type { Location } from "../lib/types";
 
 interface StockRow {
@@ -15,10 +15,19 @@ interface StockRow {
   estimated_days_remaining: number | null;
   location_name: string | null;
   image_url: string | null;
+  best_before_date: string | null;
 }
 
 const FALLBACK_IMG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'%3E%3C/polyline%3E%3Cpolyline points='3.27 6.96 12 12.01 20.73 6.96'%3E%3C/polyline%3E%3Cline x1='12' y1='22.08' x2='12' y2='12'%3E%3C/line%3E%3C/svg%3E";
+
+function daysUntil(dateStr: string): number {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 export function Dashboard() {
   const [rows, setRows] = useState<StockRow[]>([]);
@@ -39,7 +48,7 @@ export function Dashboard() {
       .from("stock_items")
       .select(`
         id, product_id, quantity, unit, min_quantity,
-        avg_daily_consumption, last_restocked_at,
+        avg_daily_consumption, last_restocked_at, best_before_date,
         product_library!inner(name, category, image_url),
         locations(name)
       `)
@@ -62,6 +71,7 @@ export function Dashboard() {
             estimated_days_remaining: daysLeft,
             location_name: r.locations?.name ?? null,
             image_url: r.product_library?.image_url ?? null,
+            best_before_date: r.best_before_date ?? null,
           };
         })
       );
@@ -96,7 +106,8 @@ export function Dashboard() {
   const lowRows = rows.filter(
     (r) =>
       r.quantity <= r.min_quantity ||
-      (r.avg_daily_consumption && r.avg_daily_consumption > 0 && r.quantity / r.avg_daily_consumption <= 3)
+      (r.avg_daily_consumption && r.avg_daily_consumption > 0 && r.quantity / r.avg_daily_consumption <= 3) ||
+      (r.best_before_date && daysUntil(r.best_before_date) <= 3)
   );
 
   function startEdit(row: StockRow) {
@@ -494,6 +505,17 @@ function StockCard({
               </select>
             )}
           </span>
+          {row.best_before_date && (() => {
+            const days = daysUntil(row.best_before_date);
+            const expired = days < 0;
+            const soon = days <= 3;
+            return (
+              <span className={`text-xs flex items-center gap-1 ${expired ? "text-red-400" : soon ? "text-amber-400" : "text-slate-500"}`}>
+                <Calendar className="w-3 h-3" />
+                {expired ? `Expired ${Math.abs(days)}d ago` : days === 0 ? "Expires today" : days <= 3 ? `Expires in ${days}d` : `Exp: ${row.best_before_date}`}
+              </span>
+            );
+          })()}
         </div>
       )}
     </div>
