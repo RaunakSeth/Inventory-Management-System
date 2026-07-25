@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { useNotifications } from "../components/Notifications";
 import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar } from "lucide-react";
 import type { Location } from "../lib/types";
 
@@ -30,6 +31,7 @@ function daysUntil(dateStr: string): number {
 }
 
 export function Dashboard() {
+  const { addNotification } = useNotifications();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,27 +56,56 @@ export function Dashboard() {
       `)
       .order("quantity", { ascending: true });
     if (data) {
-      setRows(
-        (data as any[]).map((r) => {
-          const qty = r.quantity;
-          const avg = r.avg_daily_consumption;
-          const daysLeft = avg && avg > 0 ? Math.round((qty / avg) * 10) / 10 : null;
-          return {
-            stock_item_id: r.id,
-            product_id: r.product_id,
-            product_name: r.product_library?.name ?? "(unknown)",
-            category: r.product_library?.category ?? null,
-            quantity: qty,
-            unit: r.unit,
-            min_quantity: r.min_quantity,
-            avg_daily_consumption: avg,
-            estimated_days_remaining: daysLeft,
-            location_name: r.locations?.name ?? null,
-            image_url: r.product_library?.image_url ?? null,
-            best_before_date: r.best_before_date ?? null,
-          };
-        })
-      );
+      const mapped = (data as any[]).map((r) => {
+        const qty = r.quantity;
+        const avg = r.avg_daily_consumption;
+        const daysLeft = avg && avg > 0 ? Math.round((qty / avg) * 10) / 10 : null;
+        return {
+          stock_item_id: r.id,
+          product_id: r.product_id,
+          product_name: r.product_library?.name ?? "(unknown)",
+          category: r.product_library?.category ?? null,
+          quantity: qty,
+          unit: r.unit,
+          min_quantity: r.min_quantity,
+          avg_daily_consumption: avg,
+          estimated_days_remaining: daysLeft,
+          location_name: r.locations?.name ?? null,
+          image_url: r.product_library?.image_url ?? null,
+          best_before_date: r.best_before_date ?? null,
+        };
+      });
+      setRows(mapped);
+
+      const lowItems = mapped.filter((r) => r.quantity <= r.min_quantity);
+      if (lowItems.length > 0) {
+        addNotification({
+          type: "warning",
+          title: "Low Stock Alert",
+          message: `${lowItems.length} item${lowItems.length > 1 ? "s" : ""} running low: ${lowItems.slice(0, 3).map((r) => r.product_name).join(", ")}${lowItems.length > 3 ? "..." : ""}`,
+          duration: 8000,
+        });
+      }
+
+      const expiringItems = mapped.filter((r) => r.best_before_date && daysUntil(r.best_before_date) <= 3 && daysUntil(r.best_before_date) >= 0);
+      if (expiringItems.length > 0) {
+        addNotification({
+          type: "warning",
+          title: "Expiring Soon",
+          message: `${expiringItems.length} item${expiringItems.length > 1 ? "s" : ""} expiring soon: ${expiringItems.slice(0, 3).map((r) => r.product_name).join(", ")}`,
+          duration: 8000,
+        });
+      }
+
+      const expiredItems = mapped.filter((r) => r.best_before_date && daysUntil(r.best_before_date) < 0);
+      if (expiredItems.length > 0) {
+        addNotification({
+          type: "error",
+          title: "Expired Items",
+          message: `${expiredItems.length} item${expiredItems.length > 1 ? "s" : ""} expired: ${expiredItems.slice(0, 3).map((r) => r.product_name).join(", ")}`,
+          duration: 10000,
+        });
+      }
     }
     setLoading(false);
   }
