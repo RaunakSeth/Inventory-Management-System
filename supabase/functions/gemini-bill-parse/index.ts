@@ -150,7 +150,10 @@ serve(async (req) => {
 
     let result: { modelUsed: string; json: any };
 
-    if (aiProvider === "openai_compatible" && aiBaseUrl) {
+    // Detect OpenAI-compatible: any base URL that's NOT Google's Gemini API
+    const isOpenAICompatible = aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com");
+
+    if (isOpenAICompatible && aiBaseUrl) {
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT, RESPONSE_SCHEMA);
     } else if (aiApiKey) {
       result = await callGeminiWithFallback(

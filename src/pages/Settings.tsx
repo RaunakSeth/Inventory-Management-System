@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { useSettings, type AIProvider } from "../lib/settings";
 import { useNotifications } from "../components/Notifications";
-import { Settings, Key, Globe, Cpu, Bell, Save, Zap, Info, Link, Unlink, ExternalLink } from "lucide-react";
+import { Settings, Key, Globe, Cpu, Bell, Save, Zap, Info, Link, Unlink, ExternalLink, ChevronRight } from "lucide-react";
 
 const PROVIDERS: { value: AIProvider; label: string; description: string; free?: boolean }[] = [
-  { value: "huggingface", label: "Hugging Face", description: "Free tier — no API key needed after OAuth", free: true },
-  { value: "groq", label: "Groq", description: "Free tier — fast inference, no API key needed", free: true },
-  { value: "together", label: "Together AI", description: "Free credits on signup", free: true },
+  { value: "huggingface", label: "Hugging Face", description: "Free tier — OAuth (one-click connect)", free: true },
+  { value: "groq", label: "Groq (API Key)", description: "Free tier — fast inference, paste your key", free: true },
+  { value: "together", label: "Together AI", description: "Free credits on signup" },
   { value: "gemini", label: "Google Gemini", description: "Requires API key from Google AI Studio" },
   { value: "none", label: "Disabled (No AI)", description: "Manual entry only, no AI features" },
 ];
+
+const API_PRESETS: Record<string, { label: string; baseUrl: string; model: string }> = {
+  groq: { label: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.2-11b-vision-preview" },
+  together: { label: "Together AI", baseUrl: "https://api.together.xyz/v1", model: "togethercomputer/llava-1.5-7b-hf" },
+  ollama: { label: "Ollama (Local)", baseUrl: "http://localhost:11434/v1", model: "llava" },
+  lmstudio: { label: "LM Studio", baseUrl: "http://localhost:1234/v1", model: "local-model" },
+};
 
 const FREE_PROVIDER_INFO: Record<string, { name: string; url: string; steps: string[] }> = {
   huggingface: {
@@ -18,25 +25,7 @@ const FREE_PROVIDER_INFO: Record<string, { name: string; url: string; steps: str
     steps: [
       "Click 'Connect with Hugging Face' below",
       "Authorize the app in the popup",
-      "You're done! Free vision AI (llava) enabled",
-    ],
-  },
-  groq: {
-    name: "Groq",
-    url: "https://console.groq.com/keys",
-    steps: [
-      "Click 'Connect with Groq' below",
-      "Log in or create a free account",
-      "Authorize the app — fast inference enabled",
-    ],
-  },
-  together: {
-    name: "Together AI",
-    url: "https://api.together.xyz/settings/api-keys",
-    steps: [
-      "Click 'Connect with Together AI' below",
-      "Sign up for free credits",
-      "Authorize — access to llava and more",
+      "You're done! Free vision AI enabled",
     ],
   },
 };
@@ -69,11 +58,19 @@ export default function SettingsPage() {
 
   async function handleSaveManual() {
     setSaving(true);
+    // Detect provider type from base URL
+    let provider: AIProvider = "none";
+    if (apiKey) {
+      if (baseUrl.includes("groq.com")) provider = "gemini"; // Use gemini provider type, edge functions handle OpenAI-compat
+      else if (baseUrl.includes("together.xyz")) provider = "gemini";
+      else if (baseUrl.includes("generativelanguage.googleapis.com")) provider = "gemini";
+      else provider = "gemini"; // Default to gemini provider type for any key
+    }
     await updateSettings({
       ai_api_key: apiKey || null,
       ai_base_url: baseUrl,
       ai_model: model,
-      ai_provider: apiKey ? "gemini" : "none",
+      ai_provider: provider,
     });
     addNotification({ type: "success", title: "Settings saved" });
     setSaving(false);
@@ -160,9 +157,27 @@ export default function SettingsPage() {
       <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-4">
         <div className="flex items-center gap-2 text-slate-300">
           <Key className="w-4 h-4" />
-          <h2 className="font-semibold">Manual API Key (Optional)</h2>
+          <h2 className="font-semibold">API Key</h2>
         </div>
-        <p className="text-xs text-slate-500">For power users with their own API key. OAuth above is recommended for most users.</p>
+        <p className="text-xs text-slate-500">Paste your API key from any provider. Quick presets below:</p>
+
+        {/* Quick Presets */}
+        <div className="grid grid-cols-2 gap-2">
+          {Object.entries(API_PRESETS).map(([key, preset]) => (
+            <button
+              key={key}
+              onClick={() => { setBaseUrl(preset.baseUrl); setModel(preset.model); }}
+              className={`p-2 rounded-lg border text-left text-xs transition ${
+                baseUrl === preset.baseUrl
+                  ? "border-emerald-500/50 bg-emerald-500/10"
+                  : "border-slate-700 bg-slate-800/50 hover:border-slate-500"
+              }`}
+            >
+              <span className="font-medium text-slate-200">{preset.label}</span>
+              <span className="block text-slate-500 truncate mt-0.5">{preset.baseUrl.replace("https://", "").replace("http://", "")}</span>
+            </button>
+          ))}
+        </div>
 
         <label className="block text-sm">
           <span className="text-slate-400 flex items-center gap-1 mb-1">
@@ -172,20 +187,20 @@ export default function SettingsPage() {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="AIza... or sk-..."
+            placeholder="gsk_... (Groq) or AIza... (Gemini)"
             className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </label>
 
         <label className="block text-sm">
           <span className="text-slate-400 flex items-center gap-1 mb-1">
-            <Globe className="w-3 h-3" /> API Base URL (for OpenAI-compatible)
+            <Globe className="w-3 h-3" /> API Base URL
           </span>
           <input
             type="url"
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="http://localhost:11434/v1"
+            placeholder="https://api.groq.com/openai/v1"
             className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </label>
@@ -196,18 +211,18 @@ export default function SettingsPage() {
             type="text"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="llava"
+            placeholder="llama-3.2-11b-vision-preview"
             className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
         </label>
 
         <button
           onClick={handleSaveManual}
-          disabled={saving}
-          className="w-full py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm font-medium hover:bg-slate-700 disabled:opacity-50 flex items-center justify-center gap-2"
+          disabled={saving || !apiKey}
+          className="w-full py-2 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-2"
         >
           <Save className="w-4 h-4" />
-          {saving ? "Saving..." : "Save Manual Key"}
+          {saving ? "Saving..." : "Save API Key"}
         </button>
       </section>
 
