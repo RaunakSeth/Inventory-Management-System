@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSettings, type AIProvider } from "../lib/settings";
 import { useNotifications } from "../components/Notifications";
 import { Settings, Key, Globe, Cpu, Bell, Save, Zap, Info, Link, Unlink, ExternalLink, ChevronRight } from "lucide-react";
@@ -79,6 +79,18 @@ export default function SettingsPage() {
   async function handleSaveNotifications(patch: Partial<typeof settings>) {
     await updateSettings(patch);
   }
+
+  // Auto-close popup if this is the OAuth callback redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("oauth") === "success") {
+      addNotification({ type: "success", title: "AI provider connected!" });
+      // If in a popup, close it
+      if (window.opener) {
+        setTimeout(() => window.close(), 1500);
+      }
+    }
+  }, []);
 
   if (loading) {
     return (

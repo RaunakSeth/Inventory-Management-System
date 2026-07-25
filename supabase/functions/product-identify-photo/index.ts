@@ -123,8 +123,9 @@ serve(async (req) => {
         if (settings) {
           aiProvider = settings.oauth_provider ?? settings.ai_provider ?? "gemini";
           aiApiKey = settings.oauth_access_token ?? settings.ai_api_key ?? SERVER_GEMINI_KEY;
-          aiBaseUrl = settings.ai_base_url ?? "";
-          aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
+          // HuggingFace OAuth tokens work via their Inference API (OpenAI-compatible)
+          aiBaseUrl = settings.ai_base_url ?? (settings.oauth_provider === "huggingface" ? "https://api-inference.huggingface.co/v1" : "");
+          aiModel = settings.ai_model ?? (settings.oauth_provider === "huggingface" ? "llava-hf/llava-1.5-7b-hf" : GEMINI_VISION_CHAIN[0]);
         }
       }
     }
