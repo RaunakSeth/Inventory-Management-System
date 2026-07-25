@@ -1,8 +1,3 @@
-// Supabase Edge Function: Initiate OAuth flow for AI providers
-// POST /oauth-init { provider: "huggingface" }
-// Returns { url } for popup OAuth flow
-// Encodes user JWT into state so callback can authenticate
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -16,7 +11,7 @@ const PROVIDERS: Record<string, { authUrl: string; clientId: string; scope: stri
   huggingface: {
     authUrl: "https://huggingface.co/oauth/authorize",
     clientId: Deno.env.get("HF_CLIENT_ID") ?? "",
-    scope: "read-repos inference-api openid profile email",
+    scope: "openid profile email inference-api",
   },
 };
 
@@ -34,16 +29,6 @@ async function sha256(plain: string): Promise<ArrayBuffer> {
 function base64urlencode(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-// Simple XOR encode for state (not crypto-secure, just prevents casual tampering)
-function encodeState(data: string, key: string): string {
-  const encoded = btoa(data);
-  return encoded;
-}
-
-function decodeState(data: string): string {
-  return atob(data);
 }
 
 serve(async (req) => {
@@ -72,7 +57,7 @@ serve(async (req) => {
       });
     }
 
-    // Get JWT from Authorization header
+    // Get user JWT
     const authHeader = req.headers.get("Authorization") ?? "";
     const jwt = authHeader.replace("Bearer ", "");
     if (!jwt) {
@@ -82,7 +67,6 @@ serve(async (req) => {
       });
     }
 
-    // Verify user is valid
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -100,11 +84,9 @@ serve(async (req) => {
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = base64urlencode(await sha256(codeVerifier));
 
-    // Encode state: provider|userJwt|codeVerifier (base64)
-    const statePayload = JSON.stringify({ provider, jwt, codeVerifier, ts: Date.now() });
-    const state = btoa(statePayload);
+    // Short state: just user_id + codeVerifier (no JWT)
+    const state = btoa(JSON.stringify({ uid: user.id, cv: codeVerifier }));
 
-    // Build redirect URL
     const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/oauth-callback`;
 
     const params = new URLSearchParams({
