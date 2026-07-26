@@ -19,7 +19,8 @@ serve(async (req) => {
     let jwt = authHeader;
     if (!jwt && req.method === "POST") {
       try {
-        const body = await req.clone().json();
+        const cloned = req.clone();
+        const body = await cloned.json();
         if (body.token) jwt = body.token;
       } catch {}
     }

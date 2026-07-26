@@ -56,11 +56,15 @@ serve(async (req) => {
 
     let result: { modelUsed: string; json: any };
 
+    console.log("[product-identify-photo] AI config:", { aiBaseUrl, aiModel, hasKey: !!aiApiKey });
+
     if (aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com")) {
       // OpenAI-compatible (Groq, OpenAI, Together, Ollama, etc.)
+      console.log("[product-identify-photo] Calling OpenAI-compatible:", { baseUrl: aiBaseUrl, model: aiModel });
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT);
     } else if (aiApiKey) {
       // Gemini
+      console.log("[product-identify-photo] Calling Gemini fallback");
       result = await callGeminiWithFallback(aiApiKey, [
         { text: PROMPT },
         { inline_data: { mime_type: mime_type || "image/jpeg", data: image_base64 } },
@@ -71,11 +75,13 @@ serve(async (req) => {
       });
     }
 
+    console.log("[product-identify-photo] Success:", result.modelUsed);
     return new Response(
       JSON.stringify({ found: true, source: "ai_vision", ...result.json, _model_used: result.modelUsed }),
       { status: 200, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
     );
   } catch (err) {
+    console.error("[product-identify-photo] ERROR:", err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500, headers: { "Content-Type": "application/json", ...CORS_HEADERS },
     });
