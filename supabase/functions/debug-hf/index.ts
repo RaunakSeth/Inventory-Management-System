@@ -14,7 +14,15 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
 
   try {
-    const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
+    // Accept JWT from Authorization header OR from body.token
+    const authHeader = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
+    let jwt = authHeader;
+    if (!jwt && req.method === "POST") {
+      try {
+        const body = await req.clone().json();
+        if (body.token) jwt = body.token;
+      } catch {}
+    }
     if (!jwt) return jsonRes({ error: "No JWT" }, 400);
 
     const supabase = createClient(
