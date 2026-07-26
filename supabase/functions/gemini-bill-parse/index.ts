@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { callGeminiWithFallback, callHuggingFace, callOpenAICompatible, GEMINI_VISION_CHAIN } from "../_shared/gemini.ts";
+import { callGeminiWithFallback, callOpenAICompatible, GEMINI_VISION_CHAIN } from "../_shared/gemini.ts";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -36,7 +36,6 @@ serve(async (req) => {
     let aiApiKey = SERVER_GEMINI_KEY;
     let aiBaseUrl = "";
     let aiModel = GEMINI_VISION_CHAIN[0];
-    let oauthProvider = "";
 
     if (jwt) {
       const supabase = createClient(
@@ -47,12 +46,11 @@ serve(async (req) => {
       if (user) {
         const { data: settings } = await supabase
           .from("user_settings")
-          .select("ai_api_key, ai_base_url, ai_model, oauth_provider, oauth_access_token")
+          .select("ai_api_key, ai_base_url, ai_model")
           .eq("user_id", user.id).single();
 
         if (settings) {
-          oauthProvider = settings.oauth_provider ?? "";
-          aiApiKey = settings.oauth_access_token ?? settings.ai_api_key ?? SERVER_GEMINI_KEY;
+          aiApiKey = settings.ai_api_key ?? SERVER_GEMINI_KEY;
           aiBaseUrl = settings.ai_base_url ?? "";
           aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
         }
@@ -61,9 +59,7 @@ serve(async (req) => {
 
     let result: { modelUsed: string; json: any };
 
-    if (oauthProvider === "huggingface" && aiApiKey) {
-      result = await callHuggingFace(aiApiKey, aiModel || "Qwen/Qwen2.5-VL-7B-Instruct", image_base64, mime_type || "image/jpeg", PROMPT);
-    } else if (aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com")) {
+    if (aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com")) {
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT);
     } else if (aiApiKey) {
       result = await callGeminiWithFallback(aiApiKey, [

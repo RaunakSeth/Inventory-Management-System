@@ -2,10 +2,9 @@
 
 // ---------- Gemini (Google) ----------
 export const GEMINI_VISION_CHAIN = [
-  "gemini-3.5-flash",
-  "gemini-flash-latest",
   "gemini-2.0-flash",
   "gemini-2.0-flash-lite",
+  "gemini-1.5-flash",
 ];
 
 export async function callGeminiWithFallback(
@@ -54,55 +53,7 @@ export async function callGeminiWithFallback(
   throw new Error(`Gemini failed: ${lastError}`);
 }
 
-// ---------- HuggingFace Inference Providers API ----------
-export async function callHuggingFace(
-  apiKey: string,
-  model: string,
-  imageBase64: string,
-  mimeType: string,
-  prompt: string,
-): Promise<{ modelUsed: string; json: any }> {
-  // Use HF Inference Providers router (OpenAI-compatible)
-  // NOTE: llava is NOT available on Inference Providers. Use Qwen2.5-VL or others.
-  const hfModel = model || "Qwen/Qwen2.5-VL-7B-Instruct";
-
-  const body = JSON.stringify({
-    model: hfModel,
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
-        ],
-      },
-    ],
-    max_tokens: 1024,
-  });
-
-  const res = await fetch("https://router.huggingface.co/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`HF ${hfModel} error ${res.status}: ${errText.slice(0, 500)}`);
-  }
-
-  const data = await res.json();
-  const rawText = data.choices?.[0]?.message?.content;
-  if (!rawText) throw new Error(`${hfModel}: empty response`);
-
-  const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
-  return { modelUsed: hfModel, json: JSON.parse(jsonStr) };
-}
-
-// ---------- OpenAI-compatible (Groq, Together, Ollama, etc.) ----------
+// ---------- OpenAI-compatible (Groq, OpenAI, Together, Ollama, etc.) ----------
 export async function callOpenAICompatible(
   baseUrl: string,
   apiKey: string,
@@ -136,7 +87,7 @@ export async function callOpenAICompatible(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`${model} error ${res.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`${model} error ${res.status}: ${errText.slice(0, 500)}`);
   }
 
   const data = await res.json();

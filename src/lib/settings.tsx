@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { supabase } from "./supabase";
 
-export type AIProvider = "gemini" | "huggingface" | "groq" | "together" | "none";
+export type AIProvider = "gemini" | "openai_compatible" | "none";
 
 export interface UserSettings {
   id?: string;
@@ -19,46 +19,35 @@ export interface UserSettings {
   notifications_days_before_expiry: number;
 }
 
-const DEFAULT_SETTINGS: UserSettings = {
-  user_id: "",
-  ai_provider: "none",
-  ai_api_key: null,
-  ai_base_url: "http://localhost:11434/v1",
-  ai_model: "llava",
-  oauth_provider: null,
-  oauth_access_token: null,
-  oauth_refresh_token: null,
-  oauth_token_expires_at: null,
-  notifications_low_stock: true,
-  notifications_expiring: true,
-  notifications_days_before_expiry: 3,
-};
-
 interface SettingsContextValue {
   settings: UserSettings;
   loading: boolean;
   updateSettings: (patch: Partial<UserSettings>) => Promise<void>;
-  connectOAuth: (provider: "huggingface" | "groq" | "together") => Promise<void>;
-  disconnectOAuth: () => Promise<void>;
   isConfigured: boolean;
-  activeApiKey: string | null;
-  activeProvider: AIProvider;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<UserSettings>({
+    user_id: "",
+    ai_provider: "none",
+    ai_api_key: null,
+    ai_base_url: null,
+    ai_model: null,
+    oauth_provider: null,
+    oauth_access_token: null,
+    oauth_refresh_token: null,
+    oauth_token_expires_at: null,
+    notifications_low_stock: true,
+    notifications_expiring: true,
+    notifications_days_before_expiry: 3,
+  });
   const [loading, setLoading] = useState(true);
 
-  // Load settings from Supabase
   const loadSettings = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      setSettings(DEFAULT_SETTINGS);
-      setLoading(false);
-      return;
-    }
+    if (!user) { setLoading(false); return; }
 
     const { data } = await supabase
       .from("user_settings")
@@ -69,7 +58,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     if (data) {
       setSettings(data);
     } else {
-      // Create default settings
       const { data: created } = await supabase
         .from("user_settings")
         .insert({ user_id: user.id })
@@ -82,7 +70,6 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
-  // Update settings in Supabase
   const updateSettings = useCallback(async (patch: Partial<UserSettings>) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -94,94 +81,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       .upsert({ user_id: user.id, ...patch }, { onConflict: "user_id" });
   }, []);
 
-  // Initiate OAuth flow
-  const connectOAuth = useCallback(async (provider: "huggingface" | "groq" | "together") => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const res = await supabase.functions.invoke("oauth-init", {
-      body: { provider },
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
-
-    if (res.error) throw res.error;
-    const { url } = res.data;
-
-    // Open popup for OAuth
-    const width = 600, height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    window.open(url, "oauth", `width=${width},height=${height},left=${left},top=${top}`);
-
-    // Poll for settings change (token stored by callback)
-    const pollInterval = setInterval(async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) return;
-
-      const { data } = await supabase
-        .from("user_settings")
-        .select("oauth_provider, oauth_access_token, ai_provider")
-        .eq("user_id", currentUser.id)
-        .single();
-
-      if (data?.oauth_access_token) {
-        clearInterval(pollInterval);
-        setSettings((s) => ({
-          ...s,
-          oauth_provider: data.oauth_provider,
-          oauth_access_token: data.oauth_access_token,
-          ai_provider: data.ai_provider as AIProvider,
-        }));
-      }
-    }, 1000);
-
-    // Stop polling after 2 minutes
-    setTimeout(() => clearInterval(pollInterval), 120000);
-  }, [supabase]);
-
-  // Disconnect OAuth
-  const disconnectOAuth = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    await supabase
-      .from("user_settings")
-      .update({
-        oauth_provider: null,
-        oauth_access_token: null,
-        oauth_refresh_token: null,
-        oauth_token_expires_at: null,
-        ai_provider: "none",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", user.id);
-
-    setSettings((s) => ({
-      ...s,
-      oauth_provider: null,
-      oauth_access_token: null,
-      oauth_refresh_token: null,
-      oauth_token_expires_at: null,
-      ai_provider: "none",
-    }));
-  }, [supabase]);
-
-  // Determine effective API key and provider
-  const activeApiKey = settings.oauth_access_token ?? settings.ai_api_key;
-  const activeProvider = settings.oauth_provider as AIProvider ?? settings.ai_provider;
-  const isConfigured = settings.ai_provider === "none" || !!activeApiKey;
+  const isConfigured = settings.ai_provider === "none"
+    ? false
+    : !!(settings.ai_api_key || settings.oauth_access_token);
 
   return (
-    <SettingsContext.Provider value={{
-      settings,
-      loading,
-      updateSettings,
-      connectOAuth,
-      disconnectOAuth,
-      isConfigured,
-      activeApiKey,
-      activeProvider,
-    }}>
+    <SettingsContext.Provider value={{ settings, loading, updateSettings, isConfigured }}>
       {children}
     </SettingsContext.Provider>
   );
@@ -191,18 +96,4 @@ export function useSettings() {
   const ctx = useContext(SettingsContext);
   if (!ctx) throw new Error("useSettings must be used within SettingsProvider");
   return ctx;
-}
-
-// Build headers for edge function calls
-export function getAIHeaders(settings: UserSettings): Record<string, string> {
-  const apiKey = settings.oauth_access_token ?? settings.ai_api_key ?? "";
-  const provider = settings.oauth_provider ?? settings.ai_provider;
-
-  const headers: Record<string, string> = {
-    "X-AI-Provider": provider,
-  };
-  if (apiKey) headers["X-AI-Api-Key"] = apiKey;
-  if (settings.ai_base_url) headers["X-AI-Base-Url"] = settings.ai_base_url;
-  if (settings.ai_model) headers["X-AI-Model"] = settings.ai_model;
-  return headers;
 }

@@ -1,114 +1,161 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSettings, type AIProvider } from "../lib/settings";
 import { useNotifications } from "../components/Notifications";
-import { Settings, Key, Globe, Cpu, Bell, Save, Link, Unlink, ExternalLink } from "lucide-react";
+import { Settings, Key, Bell, Save, ExternalLink, Check, Zap } from "lucide-react";
 
-const API_PRESETS: Record<string, { label: string; baseUrl: string; model: string; placeholder: string }> = {
-  groq: { label: "Groq", baseUrl: "https://api.groq.com/openai/v1", model: "llama-3.2-11b-vision-preview", placeholder: "gsk_..." },
-  gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.0-flash", placeholder: "AIza..." },
-  together: { label: "Together AI", baseUrl: "https://api.together.xyz/v1", model: "togethercomputer/llava-1.5-7b-hf", placeholder: "tok_..." },
-  ollama: { label: "Ollama (Local)", baseUrl: "http://localhost:11434/v1", model: "llava", placeholder: "No key needed" },
-};
+interface ProviderCard {
+  id: string;
+  name: string;
+  description: string;
+  free: boolean;
+  signupUrl: string;
+  docsUrl: string;
+  baseUrl: string;
+  model: string;
+  keyPlaceholder: string;
+  keyPrefix: string;
+}
+
+const PROVIDERS: ProviderCard[] = [
+  {
+    id: "groq",
+    name: "Groq",
+    description: "Free tier — fast inference, vision support",
+    free: true,
+    signupUrl: "https://console.groq.com/keys",
+    docsUrl: "https://console.groq.com/docs/models",
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "llama-3.2-11b-vision-preview",
+    keyPlaceholder: "gsk_...",
+    keyPrefix: "gsk_",
+  },
+  {
+    id: "gemini",
+    name: "Google Gemini",
+    description: "Free tier — 15 RPM, 1M tokens/day",
+    free: true,
+    signupUrl: "https://aistudio.google.com/apikey",
+    docsUrl: "https://ai.google.dev/gemini-api/docs/models",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    model: "gemini-2.0-flash",
+    keyPlaceholder: "AIza...",
+    keyPrefix: "AIza",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    description: "Paid — GPT-4o vision, best quality",
+    free: false,
+    signupUrl: "https://platform.openai.com/api-keys",
+    docsUrl: "https://platform.openai.com/docs/models",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+    keyPlaceholder: "sk-...",
+    keyPrefix: "sk-",
+  },
+  {
+    id: "together",
+    name: "Together AI",
+    description: "$1 free credits — open source models",
+    free: true,
+    signupUrl: "https://api.together.xyz/settings/api-keys",
+    docsUrl: "https://docs.together.ai/docs/chat-models",
+    baseUrl: "https://api.together.xyz/v1",
+    model: "meta-llama/Llama-Vision-Free",
+    keyPlaceholder: "tok_...",
+    keyPrefix: "tok_",
+  },
+  {
+    id: "ollama",
+    name: "Ollama (Local)",
+    description: "Free — runs on your machine, no API key",
+    free: true,
+    signupUrl: "https://ollama.com/download",
+    docsUrl: "https://ollama.com/library/llava",
+    baseUrl: "http://localhost:11434/v1",
+    model: "llava",
+    keyPlaceholder: "Not needed",
+    keyPrefix: "",
+  },
+];
+
+function detectProvider(apiKey: string, baseUrl: string): string | null {
+  if (apiKey.startsWith("gsk_")) return "groq";
+  if (apiKey.startsWith("AIza")) return "gemini";
+  if (apiKey.startsWith("sk-")) return "openai";
+  if (apiKey.startsWith("tok_")) return "together";
+  if (baseUrl.includes("localhost")) return "ollama";
+  return null;
+}
 
 export default function SettingsPage() {
-  const { settings, loading, updateSettings, connectOAuth, disconnectOAuth } = useSettings();
+  const { settings, loading, updateSettings } = useSettings();
   const { addNotification } = useNotifications();
   const [saving, setSaving] = useState(false);
   const [apiKey, setApiKey] = useState(settings.ai_api_key ?? "");
   const [baseUrl, setBaseUrl] = useState(settings.ai_base_url ?? "");
   const [model, setModel] = useState(settings.ai_model ?? "");
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
 
-  // Reload settings from DB when they change
   useEffect(() => {
     setApiKey(settings.ai_api_key ?? "");
     setBaseUrl(settings.ai_base_url ?? "");
     setModel(settings.ai_model ?? "");
-  }, [settings.ai_api_key, settings.ai_base_url, settings.ai_model]);
-
-  // Listen for OAuth popup result via postMessage
-  const handleOAuthMessage = useCallback((e: MessageEvent) => {
-    if (e.data?.type === "oauth-result") {
-      if (e.data.success) {
-        addNotification({ type: "success", title: `Connected to ${e.data.provider}!` });
-        // Reload settings from DB
-        updateSettings({});
-      } else {
-        addNotification({ type: "error", title: "OAuth failed", message: e.data.error });
-      }
+    if (settings.ai_api_key || settings.ai_base_url) {
+      setSelectedProvider(detectProvider(settings.ai_api_key ?? "", settings.ai_base_url ?? ""));
     }
-  }, [addNotification, updateSettings]);
+  }, [settings]);
 
-  useEffect(() => {
-    window.addEventListener("message", handleOAuthMessage);
-    return () => window.removeEventListener("message", handleOAuthMessage);
-  }, [handleOAuthMessage]);
-
-  // Handle OAuth redirect in URL params (fallback)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const oauthResult = params.get("oauth");
-    if (oauthResult === "success") {
-      addNotification({ type: "success", title: "AI provider connected!" });
-      updateSettings({});
-      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
-    } else if (oauthResult === "error") {
-      addNotification({ type: "error", title: "OAuth failed", message: params.get("msg") ?? "" });
-      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
-    }
-  }, []);
-
-  async function handleConnect(provider: "huggingface") {
-    try {
-      await connectOAuth(provider);
-      addNotification({ type: "info", title: "Opening authorization page..." });
-    } catch (err) {
-      addNotification({
-        type: "error",
-        title: "Connection failed",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
+  function selectProvider(p: ProviderCard) {
+    setSelectedProvider(p.id);
+    setBaseUrl(p.baseUrl);
+    setModel(p.model);
+    setApiKey("");
   }
 
-  async function handleDisconnect() {
-    try {
-      await disconnectOAuth();
-      addNotification({ type: "info", title: "Disconnected from AI provider" });
-    } catch (err) {
-      addNotification({ type: "error", title: "Disconnect failed", message: err instanceof Error ? err.message : String(err) });
-    }
-  }
-
-  async function handleSaveManual() {
+  async function handleSave() {
     setSaving(true);
-    let provider: AIProvider = "none";
-    if (apiKey) {
-      if (baseUrl.includes("generativelanguage.googleapis.com")) provider = "gemini";
-      else provider = "gemini"; // All manual keys use gemini provider type; edge functions detect OpenAI-compat from URL
-    }
     await updateSettings({
       ai_api_key: apiKey || null,
       ai_base_url: baseUrl,
       ai_model: model,
-      ai_provider: provider,
+      ai_provider: apiKey || baseUrl ? "gemini" : "none",
+      oauth_provider: null,
+      oauth_access_token: null,
     });
     addNotification({ type: "success", title: "Settings saved" });
     setSaving(false);
+  }
+
+  async function handleDisconnect() {
+    setApiKey("");
+    setBaseUrl("");
+    setModel("");
+    setSelectedProvider(null);
+    await updateSettings({
+      ai_api_key: null,
+      ai_base_url: null,
+      ai_model: null,
+      ai_provider: "none",
+      oauth_provider: null,
+      oauth_access_token: null,
+    });
+    addNotification({ type: "info", title: "AI disabled" });
   }
 
   async function handleSaveNotifications(patch: Partial<typeof settings>) {
     await updateSettings(patch);
   }
 
+  const isConfigured = !!settings.ai_api_key || !!settings.oauth_access_token;
+
   if (loading) {
     return (
       <div className="max-w-lg mx-auto pb-24 pt-4 flex items-center justify-center h-64">
-        <div className="text-slate-400">Loading settings...</div>
+        <div className="text-slate-400">Loading...</div>
       </div>
     );
   }
-
-  const connectedProvider = settings.oauth_provider;
 
   return (
     <div className="max-w-lg mx-auto space-y-6 pb-24 pt-4">
@@ -117,113 +164,122 @@ export default function SettingsPage() {
         <h1 className="text-xl font-bold">Settings</h1>
       </div>
 
-      {/* Connected Provider */}
-      {connectedProvider ? (
-        <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
-            <Link className="w-5 h-5 text-emerald-400" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-emerald-300">Connected to {connectedProvider === "huggingface" ? "Hugging Face" : connectedProvider}</p>
-              <p className="text-xs text-slate-400">Free AI via OAuth — works on all your devices</p>
-            </div>
+      {/* Status */}
+      {isConfigured && (
+        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span className="text-sm text-emerald-300">AI configured: {selectedProvider ? PROVIDERS.find(p => p.id === selectedProvider)?.name : "Custom"}</span>
           </div>
-          <button
-            onClick={handleDisconnect}
-            className="w-full py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm font-medium flex items-center justify-center gap-2 hover:bg-red-500/20"
-          >
-            <Unlink className="w-4 h-4" />
-            Disconnect
-          </button>
-        </section>
-      ) : (
-        /* Connect Free Provider */
-        <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-          <div className="flex items-center gap-2 text-slate-300">
-            <Cpu className="w-4 h-4" />
-            <h2 className="font-semibold">Free AI (One-Click)</h2>
-          </div>
-          <p className="text-xs text-slate-500">Connect for free AI vision — no API key needed.</p>
-          <button
-            onClick={() => handleConnect("huggingface")}
-            className="w-full p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:border-emerald-500/50 hover:bg-emerald-500/10 transition text-left flex items-center gap-3"
-          >
-            <ExternalLink className="w-5 h-5 text-emerald-400 shrink-0" />
-            <div>
-              <span className="text-sm font-medium text-slate-200">Connect with Hugging Face</span>
-              <p className="text-xs text-slate-500">Free vision AI (llava model)</p>
-            </div>
-          </button>
-        </section>
+          <button onClick={handleDisconnect} className="text-xs text-red-400 hover:text-red-300">Disable</button>
+        </div>
       )}
 
-      {/* API Key */}
-      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-4">
+      {/* Provider Cards */}
+      <section className="space-y-3">
         <div className="flex items-center gap-2 text-slate-300">
-          <Key className="w-4 h-4" />
-          <h2 className="font-semibold">API Key</h2>
+          <Zap className="w-4 h-4" />
+          <h2 className="font-semibold">Choose AI Provider</h2>
         </div>
-        <p className="text-xs text-slate-500">Or paste your own API key from any provider:</p>
 
-        {/* Presets */}
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(API_PRESETS).map(([key, preset]) => (
-            <button
-              key={key}
-              onClick={() => { setBaseUrl(preset.baseUrl); setModel(preset.model); setApiKey(""); }}
-              className={`p-2 rounded-lg border text-left text-xs transition ${
-                baseUrl === preset.baseUrl
+        {PROVIDERS.map((p) => {
+          const isSelected = selectedProvider === p.id;
+          const isConfiguredThis = isSelected && !!apiKey;
+          return (
+            <div
+              key={p.id}
+              className={`rounded-xl border p-4 space-y-3 transition ${
+                isSelected
                   ? "border-emerald-500/50 bg-emerald-500/10"
-                  : "border-slate-700 bg-slate-800/50 hover:border-slate-500"
+                  : "border-slate-800 bg-slate-900 hover:border-slate-600"
               }`}
             >
-              <span className="font-medium text-slate-200">{preset.label}</span>
-              <span className="block text-slate-500 truncate mt-0.5">{preset.baseUrl.replace("https://", "").replace("http://", "").split("/")[0]}</span>
-            </button>
-          ))}
-        </div>
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-200">{p.name}</span>
+                    {p.free && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium">
+                        FREE
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{p.description}</p>
+                </div>
+                <button
+                  onClick={() => selectProvider(p)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                    isSelected
+                      ? "bg-emerald-500 text-white"
+                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  {isSelected ? "Selected" : "Use"}
+                </button>
+              </div>
 
-        <label className="block text-sm">
-          <span className="text-slate-400 mb-1 block">API Key</span>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={baseUrl.includes("localhost") ? "Not needed for local" : "Paste your API key"}
-            className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-          />
-        </label>
+              {isSelected && (
+                <div className="space-y-2 pt-2 border-t border-slate-700/50">
+                  {/* Get API Key link */}
+                  <a
+                    href={p.signupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    {p.id === "ollama" ? "Download Ollama" : "Get API Key"} (opens in new tab)
+                  </a>
 
-        <label className="block text-sm">
-          <span className="text-slate-400 mb-1 block">Base URL</span>
-          <input
-            type="url"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://api.groq.com/openai/v1"
-            className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-          />
-        </label>
+                  {/* API Key Input */}
+                  {p.id !== "ollama" && (
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder={p.keyPlaceholder}
+                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                    />
+                  )}
 
-        <label className="block text-sm">
-          <span className="text-slate-400 mb-1 block">Model</span>
-          <input
-            type="text"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="gemini-2.0-flash"
-            className="w-full rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-          />
-        </label>
+                  {/* Base URL + Model (pre-filled, editable) */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                      className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
 
-        <button
-          onClick={handleSaveManual}
-          disabled={saving}
-          className="w-full py-2.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          {saving ? "Saving..." : "Save API Key"}
-        </button>
+                  {isConfiguredThis && (
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+                      <Check className="w-3 h-3" />
+                      Key saved
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </section>
+
+      {/* Save Button */}
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full py-3 rounded-xl bg-emerald-500 font-semibold text-sm hover:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        <Save className="w-4 h-4" />
+        {saving ? "Saving..." : "Save Settings"}
+      </button>
 
       {/* Notifications */}
       <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-4">
