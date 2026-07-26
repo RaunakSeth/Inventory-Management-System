@@ -54,7 +54,7 @@ export async function callGeminiWithFallback(
   throw new Error(`Gemini failed: ${lastError}`);
 }
 
-// ---------- HuggingFace Inference API (native format) ----------
+// ---------- HuggingFace Inference Providers API ----------
 export async function callHuggingFace(
   apiKey: string,
   model: string,
@@ -62,8 +62,11 @@ export async function callHuggingFace(
   mimeType: string,
   prompt: string,
 ): Promise<{ modelUsed: string; json: any }> {
+  // Use HF Inference Providers router (OpenAI-compatible)
+  const hfModel = model || "llava-hf/llava-v1.6-mistral-7b-hf";
+
   const body = JSON.stringify({
-    model,
+    model: hfModel,
     messages: [
       {
         role: "user",
@@ -76,7 +79,7 @@ export async function callHuggingFace(
     max_tokens: 1024,
   });
 
-  const res = await fetch("https://api-inference.huggingface.co/v1/chat/completions", {
+  const res = await fetch("https://router.huggingface.co/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -87,15 +90,15 @@ export async function callHuggingFace(
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`HF ${model} error ${res.status}: ${errText.slice(0, 300)}`);
+    throw new Error(`HF ${hfModel} error ${res.status}: ${errText.slice(0, 500)}`);
   }
 
   const data = await res.json();
   const rawText = data.choices?.[0]?.message?.content;
-  if (!rawText) throw new Error(`${model}: empty response`);
+  if (!rawText) throw new Error(`${hfModel}: empty response`);
 
   const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
-  return { modelUsed: model, json: JSON.parse(jsonStr) };
+  return { modelUsed: hfModel, json: JSON.parse(jsonStr) };
 }
 
 // ---------- OpenAI-compatible (Groq, Together, Ollama, etc.) ----------
