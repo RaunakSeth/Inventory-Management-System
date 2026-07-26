@@ -60,7 +60,7 @@ serve(async (req) => {
 
     if (oauthProvider === "huggingface" && aiApiKey) {
       // HuggingFace: use native API
-      result = await callHuggingFace(aiApiKey, aiModel || "llava-hf/llava-1.5-7b-hf", image_base64, mime_type || "image/jpeg", PROMPT);
+      result = await callHuggingFace(aiApiKey, aiModel || "Qwen/Qwen2.5-VL-7B-Instruct", image_base64, mime_type || "image/jpeg", PROMPT);
     } else if (aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com")) {
       // OpenAI-compatible (Groq, Together, Ollama, etc.)
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT);

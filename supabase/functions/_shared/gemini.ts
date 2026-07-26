@@ -63,7 +63,8 @@ export async function callHuggingFace(
   prompt: string,
 ): Promise<{ modelUsed: string; json: any }> {
   // Use HF Inference Providers router (OpenAI-compatible)
-  const hfModel = model || "llava-hf/llava-v1.6-mistral-7b-hf";
+  // NOTE: llava is NOT available on Inference Providers. Use Qwen2.5-VL or others.
+  const hfModel = model || "Qwen/Qwen2.5-VL-7B-Instruct";
 
   const body = JSON.stringify({
     model: hfModel,
