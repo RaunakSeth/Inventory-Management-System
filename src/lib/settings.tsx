@@ -144,9 +144,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.functions.invoke("user-settings", {
-      method: "DELETE",
-    });
+    await supabase
+      .from("user_settings")
+      .update({
+        oauth_provider: null,
+        oauth_access_token: null,
+        oauth_refresh_token: null,
+        oauth_token_expires_at: null,
+        ai_provider: "none",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id);
 
     setSettings((s) => ({
       ...s,

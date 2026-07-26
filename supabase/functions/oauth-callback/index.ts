@@ -7,9 +7,18 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
-const TOKEN_URLS: Record<string, string> = {
-  huggingface: "https://huggingface.co/oauth/token",
-};
+function popupCloseHtml(success: boolean, provider: string, errorMsg?: string): Response {
+  const msg = success ? `Connected to ${provider}!` : `Error: ${errorMsg ?? "unknown"}`;
+  const html = `<!DOCTYPE html><html><body><script>
+    window.opener && window.opener.postMessage({ type: "oauth-result", success: ${success}, provider: "${provider}", error: "${errorMsg ?? ""}" }, "*");
+    window.close();
+    document.body.textContent = "${msg} — this window should close automatically.";
+  </script><p>${msg}</p></body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { "Content-Type": "text/html", ...CORS_HEADERS },
+  });
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -23,20 +32,18 @@ serve(async (req) => {
     const error = url.searchParams.get("error");
 
     if (error) {
-      const appUrl = Deno.env.get("APP_URL") ?? "https://homeessentialmanager.netlify.app";
-      return Response.redirect(`${appUrl}#/settings?oauth=error&msg=${encodeURIComponent(error)}`, 302);
+      return popupCloseHtml(false, "huggingface", error);
     }
 
     if (!code || !stateParam) {
-      return new Response("Missing code or state", { status: 400, headers: CORS_HEADERS });
+      return popupCloseHtml(false, "", "Missing code or state");
     }
 
-    // Decode state: just user_id + code_verifier
     let stateData: { uid: string; cv: string };
     try {
       stateData = JSON.parse(atob(stateParam));
     } catch {
-      return new Response("Invalid state", { status: 400, headers: CORS_HEADERS });
+      return popupCloseHtml(false, "", "Invalid state");
     }
 
     const { uid: userId, cv: codeVerifier } = stateData;
@@ -51,7 +58,7 @@ serve(async (req) => {
       code_verifier: codeVerifier,
     });
 
-    const tokenRes = await fetch(TOKEN_URLS.huggingface, {
+    const tokenRes = await fetch("https://huggingface.co/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: tokenBody.toString(),
@@ -59,8 +66,7 @@ serve(async (req) => {
 
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
-      const appUrl = Deno.env.get("APP_URL") ?? "https://homeessentialmanager.netlify.app";
-      return Response.redirect(`${appUrl}#/settings?oauth=error&msg=${encodeURIComponent(`Token exchange failed: ${errText}`)}`, 302);
+      return popupCloseHtml(false, "huggingface", `Token exchange failed: ${errText.slice(0, 200)}`);
     }
 
     const tokenData = await tokenRes.json();
@@ -69,7 +75,7 @@ serve(async (req) => {
     const expiresIn = tokenData.expires_in ?? 3600;
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-    // Use service role to upsert settings (no user JWT needed)
+    // Use service role to upsert settings
     const adminSupabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -88,15 +94,11 @@ serve(async (req) => {
       }, { onConflict: "user_id" });
 
     if (upsertErr) {
-      const appUrl = Deno.env.get("APP_URL") ?? "https://homeessentialmanager.netlify.app";
-      return Response.redirect(`${appUrl}#/settings?oauth=error&msg=${encodeURIComponent(`DB error: ${upsertErr.message}`)}`, 302);
+      return popupCloseHtml(false, "huggingface", `DB error: ${upsertErr.message}`);
     }
 
-    // Success — redirect back to app
-    const appUrl = Deno.env.get("APP_URL") ?? "https://homeessentialmanager.netlify.app";
-    return Response.redirect(`${appUrl}#/settings?oauth=success&provider=huggingface`, 302);
+    return popupCloseHtml(true, "huggingface");
   } catch (err) {
-    const appUrl = Deno.env.get("APP_URL") ?? "https://homeessentialmanager.netlify.app";
-    return Response.redirect(`${appUrl}#/settings?oauth=error&msg=${encodeURIComponent(String(err))}`, 302);
+    return popupCloseHtml(false, "", String(err));
   }
 });

@@ -1,15 +1,11 @@
 // Supabase Edge Function: User settings CRUD
-// GET    /user-settings - Get current user's settings
-// POST   /user-settings - Create/update settings
-// DELETE /user-settings - Clear OAuth connection
-
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
 serve(async (req) => {

@@ -1,16 +1,7 @@
-// Shared by gemini-bill-parse and product-identify-photo. Tries each model
-// in order; on a quota/rate-limit response (429, or a RESOURCE_EXHAUSTED
-// error body) it moves to the next model instead of failing the request.
-// Order is fastest/cheapest-first; each fallback is a small quality step
-// down, not a different capability tier.
-export const GEMINI_VISION_CHAIN = [
-  "gemini-3.5-flash",
-  "gemini-flash-latest",
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
-];
+// Shared AI provider callers
 
-export const GEMINI_TEXT_ONLY_CHAIN = [
+// ---------- Gemini (Google) ----------
+export const GEMINI_VISION_CHAIN = [
   "gemini-3.5-flash",
   "gemini-flash-latest",
   "gemini-2.0-flash",
@@ -23,67 +14,131 @@ export async function callGeminiWithFallback(
   responseSchema: Record<string, unknown>,
   modelChain: string[] = GEMINI_VISION_CHAIN
 ): Promise<{ modelUsed: string; json: any }> {
-  if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set");
-  }
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
 
   let lastError = null;
-
   for (const model of modelChain) {
     try {
       const body = JSON.stringify({
         contents: [{ parts }],
         generationConfig: {
           responseMimeType: "application/json",
-          responseSchema: formatSchema(responseSchema),
+          responseSchema,
         },
       });
 
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body,
-        }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body }
       );
 
-      if (res.status === 429) {
-        lastError = `${model}: rate limited (429)`;
-        continue;
-      }
-
+      if (res.status === 429) { lastError = `${model}: rate limited`; continue; }
       if (!res.ok) {
         const errBody = await res.text();
         if (errBody.includes("RESOURCE_EXHAUSTED") || errBody.includes("quota")) {
-          lastError = `${model}: quota exhausted (${res.status})`;
-          continue;
+          lastError = `${model}: quota exhausted`; continue;
         }
-        lastError = `${model}: error ${res.status}: ${errBody.slice(0, 500)}`;
-        continue;
+        lastError = `${model}: ${res.status}: ${errBody.slice(0, 300)}`; continue;
       }
 
       const data = await res.json();
       const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!rawText) {
-        lastError = `${model}: empty response (no text in candidates)`;
-        continue;
-      }
+      if (!rawText) { lastError = `${model}: empty response`; continue; }
 
-      // Handle both plain JSON and markdown code-fenced JSON
       const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
-      const json = JSON.parse(jsonStr);
-      return { modelUsed: model, json };
+      return { modelUsed: model, json: JSON.parse(jsonStr) };
     } catch (err) {
       lastError = `${model}: ${err instanceof Error ? err.message : String(err)}`;
-      continue;
     }
   }
-
-  throw new Error(`All Gemini models exhausted or failed. Last error: ${lastError}`);
+  throw new Error(`Gemini failed: ${lastError}`);
 }
 
-// Gemini's responseSchema" nullable is just a plain boolean, pass through as-is.
-function formatSchema(schema: Record<string, unknown>): Record<string, unknown> {
-  return schema;
+// ---------- HuggingFace Inference API (native format) ----------
+export async function callHuggingFace(
+  apiKey: string,
+  model: string,
+  imageBase64: string,
+  mimeType: string,
+  prompt: string,
+): Promise<{ modelUsed: string; json: any }> {
+  const body = JSON.stringify({
+    model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+    max_tokens: 1024,
+  });
+
+  const res = await fetch("https://api-inference.huggingface.co/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`HF ${model} error ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const rawText = data.choices?.[0]?.message?.content;
+  if (!rawText) throw new Error(`${model}: empty response`);
+
+  const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
+  return { modelUsed: model, json: JSON.parse(jsonStr) };
+}
+
+// ---------- OpenAI-compatible (Groq, Together, Ollama, etc.) ----------
+export async function callOpenAICompatible(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  imageBase64: string,
+  mimeType: string,
+  prompt: string,
+): Promise<{ modelUsed: string; json: any }> {
+  const body = JSON.stringify({
+    model,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+        ],
+      },
+    ],
+    max_tokens: 1024,
+  });
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+  const res = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    body,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`${model} error ${res.status}: ${errText.slice(0, 300)}`);
+  }
+
+  const data = await res.json();
+  const rawText = data.choices?.[0]?.message?.content;
+  if (!rawText) throw new Error(`${model}: empty response`);
+
+  const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
+  return { modelUsed: model, json: JSON.parse(jsonStr) };
 }
