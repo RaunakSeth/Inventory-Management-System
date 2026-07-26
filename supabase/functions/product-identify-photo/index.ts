@@ -12,8 +12,9 @@ const SERVER_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
 // Map decommissioned Groq vision models to current ones
 const GROQ_MODEL_MAP: Record<string, string> = {
-  "llama-3.2-11b-vision-preview": "meta-llama/llama-4-scout-17b-16e-instruct",
-  "llama-3.2-90b-vision-preview": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "llama-3.2-11b-vision-preview": "qwen/qwen3.6-27b",
+  "llama-3.2-90b-vision-preview": "qwen/qwen3.6-27b",
+  "meta-llama/llama-4-scout-17b-16e-instruct": "qwen/qwen3.6-27b",
 };
 
 const PROMPT = `Identify the grocery/household product in this photo. Give a short
