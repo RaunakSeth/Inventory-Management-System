@@ -10,6 +10,11 @@ const CORS_HEADERS = {
 
 const SERVER_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
+const GROQ_MODEL_MAP: Record<string, string> = {
+  "llama-3.2-11b-vision-preview": "meta-llama/llama-4-scout-17b-16e-instruct",
+  "llama-3.2-90b-vision-preview": "meta-llama/llama-4-scout-17b-16e-instruct",
+};
+
 const PROMPT = `You are reading a grocery/household supplies bill. Extract every purchased line item.
 Rules:
 - "raw_text" must be the line exactly as printed (best-effort OCR).
@@ -53,6 +58,9 @@ serve(async (req) => {
           aiApiKey = settings.ai_api_key ?? SERVER_GEMINI_KEY;
           aiBaseUrl = settings.ai_base_url ?? "";
           aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
+          if (aiBaseUrl.includes("groq.com") && GROQ_MODEL_MAP[aiModel]) {
+            aiModel = GROQ_MODEL_MAP[aiModel];
+          }
         }
       }
     }
