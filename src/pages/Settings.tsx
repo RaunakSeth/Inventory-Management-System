@@ -67,14 +67,14 @@ const PROVIDERS: ProviderCard[] = [
   },
   {
     id: "ollama",
-    name: "Ollama (Local)",
-    description: "Free — runs on your machine, no API key",
+    name: "Ollama (Remote)",
+    description: "Free — run Ollama on your PC, connect from phone over WiFi",
     free: true,
     signupUrl: "https://ollama.com/download",
     docsUrl: "https://ollama.com/library/llava",
-    baseUrl: "http://localhost:11434/v1",
+    baseUrl: "",
     model: "llava",
-    keyPlaceholder: "Not needed",
+    keyPlaceholder: "Enter your PC's IP, e.g. http://192.168.1.5:11434/v1",
     keyPrefix: "",
   },
 ];
@@ -231,8 +231,30 @@ export default function SettingsPage() {
                     {p.id === "ollama" ? "Download Ollama" : "Get API Key"} (opens in new tab)
                   </a>
 
-                  {/* API Key Input */}
-                  {p.id !== "ollama" && (
+                  {/* Ollama setup guide */}
+                  {p.id === "ollama" && (
+                    <div className="rounded-lg bg-slate-800/50 border border-slate-700 p-3 space-y-2">
+                      <p className="text-xs text-slate-300 font-medium">Setup on your PC:</p>
+                      <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
+                        <li>Install Ollama, run: <code className="bg-slate-700 px-1 rounded">ollama pull llava</code></li>
+                        <li>Start server: <code className="bg-slate-700 px-1 rounded">ollama serve</code></li>
+                        <li>Find your PC's IP (e.g. <code className="bg-slate-700 px-1 rounded">ipconfig</code> on Windows)</li>
+                        <li>Enter the URL below</li>
+                      </ol>
+                      <p className="text-[10px] text-slate-500">Both devices must be on the same WiFi network</p>
+                    </div>
+                  )}
+
+                  {/* Base URL input for Ollama, API Key for others */}
+                  {p.id === "ollama" ? (
+                    <input
+                      type="text"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                      placeholder="http://192.168.1.5:11434/v1"
+                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                    />
+                  ) : (
                     <input
                       type="password"
                       value={apiKey}
@@ -242,26 +264,28 @@ export default function SettingsPage() {
                     />
                   )}
 
-                  {/* Base URL + Model (pre-filled, editable) */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value)}
-                      className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      value={model}
-                      onChange={(e) => setModel(e.target.value)}
-                      className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
-                    />
-                  </div>
+                  {/* Model input (editable) */}
+                  {p.id !== "ollama" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={baseUrl}
+                        onChange={(e) => setBaseUrl(e.target.value)}
+                        className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  )}
 
                   {isConfiguredThis && (
                     <div className="flex items-center gap-1.5 text-xs text-emerald-400">
                       <Check className="w-3 h-3" />
-                      Key saved
+                      {p.id === "ollama" ? "Connected" : "Key saved"}
                     </div>
                   )}
                 </div>
