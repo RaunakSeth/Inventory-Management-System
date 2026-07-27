@@ -3,7 +3,8 @@ import Webcam from "react-webcam";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { BillScanner } from "../components/BillScanner";
 import { ProductQuickAdd } from "../components/ProductQuickAdd";
-import { identifyProductFromPhoto } from "../lib/edgeFunctions";
+import { identifyProductFromPhoto, friendlyAIError } from "../lib/edgeFunctions";
+import { useNotifications } from "../components/Notifications";
 import { supabase } from "../lib/supabase";
 import type { ProductLookupResult } from "../lib/types";
 import { ScanLine, Receipt, Camera, PenLine } from "lucide-react";
@@ -76,13 +77,16 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [bestBeforeDate, setBestBeforeDate] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const webcamRef = useRef<Webcam>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { addNotification } = useNotifications();
 
   async function identifyFromCamera() {
     const dataUrl = webcamRef.current?.getScreenshot();
     if (!dataUrl) return;
     setStage("identifying");
+    setAiSuggestion(null);
     try {
       const blob = await (await fetch(dataUrl)).blob();
       const res = await identifyProductFromPhoto(blob);
@@ -92,7 +96,10 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
       setUnit(res.likely_unit ?? "pcs");
       setStage("form");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      const { title, detail } = friendlyAIError(err);
+      addNotification({ type: "error", title, message: detail });
+      setErrorMsg(detail);
+      setAiSuggestion(detail);
       setStage("form");
     }
   }

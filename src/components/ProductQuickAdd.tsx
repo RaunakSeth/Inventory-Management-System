@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Webcam from "react-webcam";
-import { identifyProductFromPhoto, lookupProductByBarcode } from "../lib/edgeFunctions";
+import { identifyProductFromPhoto, lookupProductByBarcode, friendlyAIError } from "../lib/edgeFunctions";
+import { useNotifications } from "./Notifications";
 import { supabase } from "../lib/supabase";
 import type { ProductLookupResult } from "../lib/types";
 
@@ -27,6 +28,7 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
   const [quantity, setQuantity] = useState(1);
   const [minQuantity, setMinQuantity] = useState(1);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { addNotification } = useNotifications();
 
   // Kick off the lookup once on mount.
   useEffect(() => {
@@ -57,7 +59,9 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
       setUnit(res.likely_unit ?? "pcs");
       setStage("confirm");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      const { title, detail } = friendlyAIError(err);
+      addNotification({ type: "error", title, message: detail });
+      setErrorMsg(detail);
       setStage("needs_photo");
     }
   }

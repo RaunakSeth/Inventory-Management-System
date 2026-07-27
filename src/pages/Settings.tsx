@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSettings, type AIProvider } from "../lib/settings";
 import { useNotifications } from "../components/Notifications";
-import { Settings, Key, Bell, Save, ExternalLink, Check, Zap } from "lucide-react";
+import { Settings, Key, Bell, Save, ExternalLink, Check, Zap, Loader2, ChevronDown } from "lucide-react";
 
 interface ProviderCard {
   id: string;
@@ -11,7 +11,7 @@ interface ProviderCard {
   signupUrl: string;
   docsUrl: string;
   baseUrl: string;
-  model: string;
+  defaultModel: string;
   keyPlaceholder: string;
   keyPrefix: string;
 }
@@ -20,12 +20,12 @@ const PROVIDERS: ProviderCard[] = [
   {
     id: "groq",
     name: "Groq",
-    description: "$0.60/M input — fast inference, vision support",
+    description: "Fast inference, vision support",
     free: false,
     signupUrl: "https://console.groq.com/keys",
     docsUrl: "https://console.groq.com/docs/vision",
     baseUrl: "https://api.groq.com/openai/v1",
-    model: "qwen/qwen3.6-27b",
+    defaultModel: "qwen/qwen3.6-27b",
     keyPlaceholder: "gsk_...",
     keyPrefix: "gsk_",
   },
@@ -37,7 +37,7 @@ const PROVIDERS: ProviderCard[] = [
     signupUrl: "https://aistudio.google.com/apikey",
     docsUrl: "https://ai.google.dev/gemini-api/docs/models",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    model: "gemini-2.0-flash",
+    defaultModel: "gemini-2.0-flash",
     keyPlaceholder: "AIza...",
     keyPrefix: "AIza",
   },
@@ -49,7 +49,7 @@ const PROVIDERS: ProviderCard[] = [
     signupUrl: "https://platform.openai.com/api-keys",
     docsUrl: "https://platform.openai.com/docs/models",
     baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4o-mini",
+    defaultModel: "gpt-4o-mini",
     keyPlaceholder: "sk-...",
     keyPrefix: "sk-",
   },
@@ -61,7 +61,7 @@ const PROVIDERS: ProviderCard[] = [
     signupUrl: "https://api.together.xyz/settings/api-keys",
     docsUrl: "https://docs.together.ai/docs/chat-models",
     baseUrl: "https://api.together.xyz/v1",
-    model: "meta-llama/Llama-Vision-Free",
+    defaultModel: "meta-llama/Llama-Vision-Free",
     keyPlaceholder: "tok_...",
     keyPrefix: "tok_",
   },
@@ -73,18 +73,77 @@ const PROVIDERS: ProviderCard[] = [
     signupUrl: "https://ollama.com/download",
     docsUrl: "https://ollama.com/library/llava",
     baseUrl: "",
-    model: "llava",
+    defaultModel: "llava",
     keyPlaceholder: "Enter your PC's IP, e.g. http://192.168.1.5:11434/v1",
     keyPrefix: "",
   },
 ];
+
+// Vision-capable model patterns per provider
+const VISION_PATTERNS: Record<string, string[]> = {
+  groq: ["qwen", "vision", "llama-4", "llava"],
+  gemini: [], // all gemini models support vision
+  openai: ["gpt-4o", "gpt-4.1", "o3", "o4"],
+  together: ["vision", "llama-4", "Llama-Vision", "mimo", "MiniMax", "Kimi", "Qwen"],
+  ollama: ["llava", "llama4", "mimo", "bakllava", "moondream", "minicpm-v"],
+};
+
+function isVisionModel(modelId: string, providerId: string): boolean {
+  const patterns = VISION_PATTERNS[providerId];
+  if (!patterns || patterns.length === 0) return true; // Gemini: all models
+  const lower = modelId.toLowerCase();
+  return patterns.some((p) => lower.includes(p.toLowerCase()));
+}
+
+async function fetchProviderModels(
+  providerId: string,
+  apiKey: string,
+  baseUrl: string
+): Promise<string[]> {
+  try {
+    if (providerId === "gemini") {
+      // Gemini models API
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.models || [])
+        .filter((m: any) =>
+          m.supportedGenerationMethods?.includes("generateContent")
+        )
+        .map((m: any) => m.name.replace("models/", ""))
+        .filter((name: string) => name.includes("flash") || name.includes("pro"));
+    }
+
+    if (providerId === "ollama") {
+      if (!baseUrl) return [];
+      const tagsUrl = baseUrl.replace(/\/v1\/?$/, "") + "/api/tags";
+      const res = await fetch(tagsUrl);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.models || []).map((m: any) => m.name);
+    }
+
+    // OpenAI-compatible providers (Groq, OpenAI, Together)
+    const res = await fetch(`${baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const allModels = (data.data || []).map((m: any) => m.id);
+    return allModels.filter((id: string) => isVisionModel(id, providerId));
+  } catch {
+    return [];
+  }
+}
 
 function detectProvider(apiKey: string, baseUrl: string): string | null {
   if (apiKey.startsWith("gsk_")) return "groq";
   if (apiKey.startsWith("AIza")) return "gemini";
   if (apiKey.startsWith("sk-")) return "openai";
   if (apiKey.startsWith("tok_")) return "together";
-  if (baseUrl.includes("localhost")) return "ollama";
+  if (baseUrl.includes("localhost") || baseUrl.includes("192.168")) return "ollama";
   return null;
 }
 
@@ -96,22 +155,71 @@ export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState(settings.ai_base_url ?? "");
   const [model, setModel] = useState(settings.ai_model ?? "");
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [showCustomModel, setShowCustomModel] = useState(false);
 
   useEffect(() => {
     setApiKey(settings.ai_api_key ?? "");
     setBaseUrl(settings.ai_base_url ?? "");
     setModel(settings.ai_model ?? "");
     if (settings.ai_api_key || settings.ai_base_url) {
-      setSelectedProvider(detectProvider(settings.ai_api_key ?? "", settings.ai_base_url ?? ""));
+      const detected = detectProvider(settings.ai_api_key ?? "", settings.ai_base_url ?? "");
+      setSelectedProvider(detected);
+      if (detected) {
+        fetchProviderModels(detected, settings.ai_api_key ?? "", settings.ai_base_url ?? "").then(
+          (models) => {
+            setAvailableModels(models);
+          }
+        );
+      }
     }
   }, [settings]);
+
+  const handleFetchModels = useCallback(
+    async (providerId: string, key: string, url: string) => {
+      setLoadingModels(true);
+      const models = await fetchProviderModels(providerId, key, url);
+      setAvailableModels(models);
+      setLoadingModels(false);
+      // Auto-select first model if current model not in list
+      if (models.length > 0 && !models.includes(model)) {
+        setModel(models[0]);
+      }
+    },
+    [model]
+  );
 
   function selectProvider(p: ProviderCard) {
     setSelectedProvider(p.id);
     setBaseUrl(p.baseUrl);
-    setModel(p.model);
+    setModel(p.defaultModel);
     setApiKey("");
+    setAvailableModels([]);
+    setShowCustomModel(false);
   }
+
+  // Fetch models when API key changes (debounced)
+  useEffect(() => {
+    if (!selectedProvider || selectedProvider === "ollama") return;
+    if (!apiKey) {
+      setAvailableModels([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleFetchModels(selectedProvider, apiKey, baseUrl);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [apiKey, selectedProvider]);
+
+  // Fetch Ollama models when base URL changes
+  useEffect(() => {
+    if (selectedProvider !== "ollama" || !baseUrl) return;
+    const timer = setTimeout(() => {
+      handleFetchModels("ollama", "", baseUrl);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [baseUrl, selectedProvider]);
 
   async function handleSave() {
     setSaving(true);
@@ -119,7 +227,7 @@ export default function SettingsPage() {
       ai_api_key: apiKey || null,
       ai_base_url: baseUrl,
       ai_model: model,
-      ai_provider: apiKey || baseUrl ? "gemini" : "none",
+      ai_provider: apiKey || baseUrl ? (selectedProvider === "gemini" ? "gemini" : "openai_compatible") : "none",
       oauth_provider: null,
       oauth_access_token: null,
     });
@@ -132,6 +240,8 @@ export default function SettingsPage() {
     setBaseUrl("");
     setModel("");
     setSelectedProvider(null);
+    setAvailableModels([]);
+    setShowCustomModel(false);
     await updateSettings({
       ai_api_key: null,
       ai_base_url: null,
@@ -169,9 +279,13 @@ export default function SettingsPage() {
         <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm text-emerald-300">AI configured: {selectedProvider ? PROVIDERS.find(p => p.id === selectedProvider)?.name : "Custom"}</span>
+            <span className="text-sm text-emerald-300">
+              AI configured: {selectedProvider ? PROVIDERS.find((p) => p.id === selectedProvider)?.name : "Custom"}
+            </span>
           </div>
-          <button onClick={handleDisconnect} className="text-xs text-red-400 hover:text-red-300">Disable</button>
+          <button onClick={handleDisconnect} className="text-xs text-red-400 hover:text-red-300">
+            Disable
+          </button>
         </div>
       )}
 
@@ -236,12 +350,22 @@ export default function SettingsPage() {
                     <div className="rounded-lg bg-slate-800/50 border border-slate-700 p-3 space-y-2">
                       <p className="text-xs text-slate-300 font-medium">Setup on your PC:</p>
                       <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
-                        <li>Install Ollama, run: <code className="bg-slate-700 px-1 rounded">ollama pull llava</code></li>
-                        <li>Start server: <code className="bg-slate-700 px-1 rounded">ollama serve</code></li>
-                        <li>Find your PC's IP (e.g. <code className="bg-slate-700 px-1 rounded">ipconfig</code> on Windows)</li>
+                        <li>
+                          Install Ollama, run:{" "}
+                          <code className="bg-slate-700 px-1 rounded">ollama pull llava</code>
+                        </li>
+                        <li>
+                          Start server: <code className="bg-slate-700 px-1 rounded">ollama serve</code>
+                        </li>
+                        <li>
+                          Find your PC's IP (e.g.{" "}
+                          <code className="bg-slate-700 px-1 rounded">ipconfig</code> on Windows)
+                        </li>
                         <li>Enter the URL below</li>
                       </ol>
-                      <p className="text-[10px] text-slate-500">Both devices must be on the same WiFi network</p>
+                      <p className="text-[10px] text-slate-500">
+                        Both devices must be on the same WiFi network
+                      </p>
                     </div>
                   )}
 
@@ -264,22 +388,65 @@ export default function SettingsPage() {
                     />
                   )}
 
-                  {/* Model input (editable) */}
-                  {p.id !== "ollama" && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={baseUrl}
-                        onChange={(e) => setBaseUrl(e.target.value)}
-                        className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
-                      />
-                      <input
-                        type="text"
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        className="rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
-                      />
+                  {/* Base URL (for non-Ollama, non-Gemini) */}
+                  {p.id !== "ollama" && p.id !== "gemini" && (
+                    <input
+                      type="text"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
+                    />
+                  )}
+
+                  {/* Model selector */}
+                  {loadingModels ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Fetching available models...
                     </div>
+                  ) : availableModels.length > 0 ? (
+                    <div className="space-y-1">
+                      <div className="relative">
+                        <select
+                          value={showCustomModel ? "__custom__" : model}
+                          onChange={(e) => {
+                            if (e.target.value === "__custom__") {
+                              setShowCustomModel(true);
+                              setModel("");
+                            } else {
+                              setShowCustomModel(false);
+                              setModel(e.target.value);
+                            }
+                          }}
+                          className="w-full appearance-none rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 pr-8 text-sm focus:border-emerald-500 focus:outline-none"
+                        >
+                          {availableModels.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                          <option value="__custom__">Custom model name...</option>
+                        </select>
+                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                      {showCustomModel && (
+                        <input
+                          type="text"
+                          value={model}
+                          onChange={(e) => setModel(e.target.value)}
+                          placeholder="Enter model name"
+                          className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder="Model name"
+                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                    />
                   )}
 
                   {isConfiguredThis && (
@@ -340,7 +507,9 @@ export default function SettingsPage() {
               min={1}
               max={30}
               value={settings.notifications_days_before_expiry}
-              onChange={(e) => handleSaveNotifications({ notifications_days_before_expiry: Number(e.target.value) })}
+              onChange={(e) =>
+                handleSaveNotifications({ notifications_days_before_expiry: Number(e.target.value) })
+              }
               className="w-full mt-1 rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
             />
           </label>

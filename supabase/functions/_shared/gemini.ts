@@ -61,6 +61,7 @@ export async function callOpenAICompatible(
   imageBase64: string,
   mimeType: string,
   prompt: string,
+  maxRetries = 3,
 ): Promise<{ modelUsed: string; json: any }> {
   const body = JSON.stringify({
     model,
@@ -79,21 +80,38 @@ export async function callOpenAICompatible(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    body,
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body,
+      });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`${model} error ${res.status}: ${errText.slice(0, 500)}`);
+      // Retry on 503 (over capacity) with exponential backoff
+      if (res.status === 503 && attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+        continue;
+      }
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`${model} error ${res.status}: ${errText.slice(0, 500)}`);
+      }
+
+      const data = await res.json();
+      const rawText = data.choices?.[0]?.message?.content;
+      if (!rawText) throw new Error(`${model}: empty response`);
+
+      const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
+      return { modelUsed: model, json: JSON.parse(jsonStr) };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+      }
+    }
   }
-
-  const data = await res.json();
-  const rawText = data.choices?.[0]?.message?.content;
-  if (!rawText) throw new Error(`${model}: empty response`);
-
-  const jsonStr = rawText.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "");
-  return { modelUsed: model, json: JSON.parse(jsonStr) };
+  throw lastError || new Error(`${model}: all retries failed`);
 }

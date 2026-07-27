@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import fs from "fs";
 
 export default defineConfig({
   plugins: [
@@ -22,14 +23,15 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Camera-driven scanning needs a live network call each time (Gemini,
-        // Open Food Facts) — we deliberately don't cache API responses, only
-        // the app shell, so scans never silently serve stale data offline.
         globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
       },
     }),
   ],
   server: {
-    host: true, // so you can open it from your phone on the same LAN via https://<your-ip>:5173
+    host: true,
+    https: {
+      key: fs.readFileSync("./key.pem"),
+      cert: fs.readFileSync("./cert.pem"),
+    },
   },
 });

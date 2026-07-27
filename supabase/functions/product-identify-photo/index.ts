@@ -8,8 +8,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
-const SERVER_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-
 // Map decommissioned Groq vision models to current ones
 const GROQ_MODEL_MAP: Record<string, string> = {
   "llama-3.2-11b-vision-preview": "qwen/qwen3.6-27b",
@@ -37,7 +35,7 @@ serve(async (req) => {
 
     // Get user settings from DB
     const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
-    let aiApiKey = SERVER_GEMINI_KEY;
+    let aiApiKey = "";
     let aiBaseUrl = "";
     let aiModel = GEMINI_VISION_CHAIN[0];
 
@@ -54,7 +52,7 @@ serve(async (req) => {
           .eq("user_id", user.id).single();
 
         if (settings) {
-          aiApiKey = settings.ai_api_key ?? SERVER_GEMINI_KEY;
+          aiApiKey = settings.ai_api_key ?? "";
           aiBaseUrl = settings.ai_base_url ?? "";
           aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
           // Fix decommissioned Groq models
@@ -69,17 +67,17 @@ serve(async (req) => {
 
     console.log("[product-identify-photo] AI config:", { aiBaseUrl, aiModel, hasKey: !!aiApiKey });
 
+    const parts = [
+      { text: PROMPT },
+      { inline_data: { mime_type: mime_type || "image/jpeg", data: image_base64 } },
+    ];
+
     if (aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com")) {
-      // OpenAI-compatible (Groq, OpenAI, Together, Ollama, etc.)
       console.log("[product-identify-photo] Calling OpenAI-compatible:", { baseUrl: aiBaseUrl, model: aiModel });
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT);
     } else if (aiApiKey) {
-      // Gemini
-      console.log("[product-identify-photo] Calling Gemini fallback");
-      result = await callGeminiWithFallback(aiApiKey, [
-        { text: PROMPT },
-        { inline_data: { mime_type: mime_type || "image/jpeg", data: image_base64 } },
-      ], {} as any);
+      console.log("[product-identify-photo] Calling Gemini");
+      result = await callGeminiWithFallback(aiApiKey, parts, {} as any);
     } else {
       return new Response(JSON.stringify({ error: "No AI configured. Add an API key in Settings." }), {
         status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS },

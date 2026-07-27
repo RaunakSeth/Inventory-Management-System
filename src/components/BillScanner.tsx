@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import Webcam from "react-webcam";
-import { parseBillPhoto } from "../lib/edgeFunctions";
+import { parseBillPhoto, friendlyAIError } from "../lib/edgeFunctions";
+import { useNotifications } from "./Notifications";
 import { supabase } from "../lib/supabase";
 import type { BillLineItem } from "../lib/types";
 
@@ -18,6 +19,7 @@ export function BillScanner() {
   const [rows, setRows] = useState<ReviewRow[] | null>(null);
   const [vendor, setVendor] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { addNotification } = useNotifications();
 
   async function capture() {
     const dataUrl = webcamRef.current?.getScreenshot();
@@ -49,7 +51,9 @@ export function BillScanner() {
       );
       setRows(matched);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      const { title, detail } = friendlyAIError(err);
+      addNotification({ type: "error", title, message: detail });
+      setErrorMsg(detail);
     } finally {
       setLoading(false);
     }
