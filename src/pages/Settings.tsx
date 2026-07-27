@@ -12,6 +12,7 @@ interface ProviderCard {
   docsUrl: string;
   baseUrl: string;
   defaultModel: string;
+  fallbackModels: string[];
   keyPlaceholder: string;
   keyPrefix: string;
 }
@@ -26,6 +27,7 @@ const PROVIDERS: ProviderCard[] = [
     docsUrl: "https://console.groq.com/docs/vision",
     baseUrl: "https://api.groq.com/openai/v1",
     defaultModel: "qwen/qwen3.6-27b",
+    fallbackModels: ["qwen/qwen3.6-27b"],
     keyPlaceholder: "gsk_...",
     keyPrefix: "gsk_",
   },
@@ -38,6 +40,7 @@ const PROVIDERS: ProviderCard[] = [
     docsUrl: "https://ai.google.dev/gemini-api/docs/models",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     defaultModel: "gemini-2.0-flash",
+    fallbackModels: ["gemini-2.0-flash", "gemini-2.5-flash-lite", "gemini-2.5-flash"],
     keyPlaceholder: "AIza...",
     keyPrefix: "AIza",
   },
@@ -50,6 +53,7 @@ const PROVIDERS: ProviderCard[] = [
     docsUrl: "https://platform.openai.com/docs/models",
     baseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-4o-mini",
+    fallbackModels: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
     keyPlaceholder: "sk-...",
     keyPrefix: "sk-",
   },
@@ -62,6 +66,7 @@ const PROVIDERS: ProviderCard[] = [
     docsUrl: "https://docs.together.ai/docs/chat-models",
     baseUrl: "https://api.together.xyz/v1",
     defaultModel: "meta-llama/Llama-Vision-Free",
+    fallbackModels: ["meta-llama/Llama-Vision-Free", "Qwen/Qwen3.5-9B"],
     keyPlaceholder: "tok_...",
     keyPrefix: "tok_",
   },
@@ -74,6 +79,7 @@ const PROVIDERS: ProviderCard[] = [
     docsUrl: "https://ollama.com/library/llava",
     baseUrl: "",
     defaultModel: "llava",
+    fallbackModels: ["llava"],
     keyPlaceholder: "Enter your PC's IP, e.g. http://192.168.1.5:11434/v1",
     keyPrefix: "",
   },
@@ -82,7 +88,7 @@ const PROVIDERS: ProviderCard[] = [
 // Vision-capable model patterns per provider
 const VISION_PATTERNS: Record<string, string[]> = {
   groq: ["qwen", "vision", "llama-4", "llava"],
-  gemini: [], // all gemini models support vision
+  gemini: [],
   openai: ["gpt-4o", "gpt-4.1", "o3", "o4"],
   together: ["vision", "llama-4", "Llama-Vision", "mimo", "MiniMax", "Kimi", "Qwen"],
   ollama: ["llava", "llama4", "mimo", "bakllava", "moondream", "minicpm-v"],
@@ -90,7 +96,7 @@ const VISION_PATTERNS: Record<string, string[]> = {
 
 function isVisionModel(modelId: string, providerId: string): boolean {
   const patterns = VISION_PATTERNS[providerId];
-  if (!patterns || patterns.length === 0) return true; // Gemini: all models
+  if (!patterns || patterns.length === 0) return true;
   const lower = modelId.toLowerCase();
   return patterns.some((p) => lower.includes(p.toLowerCase()));
 }
@@ -102,18 +108,20 @@ async function fetchProviderModels(
 ): Promise<string[]> {
   try {
     if (providerId === "gemini") {
-      // Gemini models API
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
       );
       if (!res.ok) return [];
       const data = await res.json();
-      return (data.models || [])
+      const models = (data.models || [])
         .filter((m: any) =>
           m.supportedGenerationMethods?.includes("generateContent")
         )
         .map((m: any) => m.name.replace("models/", ""))
-        .filter((name: string) => name.includes("flash") || name.includes("pro"));
+        .filter((name: string) =>
+          name.includes("flash") || name.includes("pro") || name.includes("gemini")
+        );
+      return models.length > 0 ? models : [];
     }
 
     if (providerId === "ollama") {
@@ -125,7 +133,7 @@ async function fetchProviderModels(
       return (data.models || []).map((m: any) => m.name);
     }
 
-    // OpenAI-compatible providers (Groq, OpenAI, Together)
+    // OpenAI-compatible providers
     const res = await fetch(`${baseUrl}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
@@ -159,6 +167,7 @@ export default function SettingsPage() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [showCustomModel, setShowCustomModel] = useState(false);
 
+  // Reload settings from DB whenever component mounts or settings change
   useEffect(() => {
     setApiKey(settings.ai_api_key ?? "");
     setBaseUrl(settings.ai_base_url ?? "");
@@ -173,6 +182,9 @@ export default function SettingsPage() {
           }
         );
       }
+    } else {
+      setSelectedProvider(null);
+      setAvailableModels([]);
     }
   }, [settings]);
 
@@ -182,7 +194,6 @@ export default function SettingsPage() {
       const models = await fetchProviderModels(providerId, key, url);
       setAvailableModels(models);
       setLoadingModels(false);
-      // Auto-select first model if current model not in list
       if (models.length > 0 && !models.includes(model)) {
         setModel(models[0]);
       }
@@ -197,6 +208,11 @@ export default function SettingsPage() {
     setApiKey("");
     setAvailableModels([]);
     setShowCustomModel(false);
+    // If user already has a key for this provider, fetch models
+    if (settings.ai_api_key && detectProvider(settings.ai_api_key, "") === p.id) {
+      setApiKey(settings.ai_api_key);
+      fetchProviderModels(p.id, settings.ai_api_key, p.baseUrl).then(setAvailableModels);
+    }
   }
 
   // Fetch models when API key changes (debounced)
@@ -258,6 +274,14 @@ export default function SettingsPage() {
   }
 
   const isConfigured = !!settings.ai_api_key || !!settings.oauth_access_token;
+  const currentProvider = selectedProvider ? PROVIDERS.find((p) => p.id === selectedProvider) : null;
+  // Merge fetched models with fallback defaults (deduplicated)
+  const displayModels = [
+    ...new Set([
+      ...(currentProvider?.fallbackModels ?? []),
+      ...availableModels,
+    ]),
+  ];
 
   if (loading) {
     return (
@@ -280,7 +304,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-emerald-400" />
             <span className="text-sm text-emerald-300">
-              AI configured: {selectedProvider ? PROVIDERS.find((p) => p.id === selectedProvider)?.name : "Custom"}
+              AI configured: {currentProvider?.name ?? "Custom"} — {model || "no model"}
             </span>
           </div>
           <button onClick={handleDisconnect} className="text-xs text-red-400 hover:text-red-300">
@@ -298,7 +322,7 @@ export default function SettingsPage() {
 
         {PROVIDERS.map((p) => {
           const isSelected = selectedProvider === p.id;
-          const isConfiguredThis = isSelected && !!apiKey;
+          const isConfiguredThis = isSelected && (!!apiKey || !!settings.ai_api_key);
           return (
             <div
               key={p.id}
@@ -334,7 +358,6 @@ export default function SettingsPage() {
 
               {isSelected && (
                 <div className="space-y-2 pt-2 border-t border-slate-700/50">
-                  {/* Get API Key link */}
                   <a
                     href={p.signupUrl}
                     target="_blank"
@@ -345,7 +368,6 @@ export default function SettingsPage() {
                     {p.id === "ollama" ? "Download Ollama" : "Get API Key"} (opens in new tab)
                   </a>
 
-                  {/* Ollama setup guide */}
                   {p.id === "ollama" && (
                     <div className="rounded-lg bg-slate-800/50 border border-slate-700 p-3 space-y-2">
                       <p className="text-xs text-slate-300 font-medium">Setup on your PC:</p>
@@ -369,7 +391,6 @@ export default function SettingsPage() {
                     </div>
                   )}
 
-                  {/* Base URL input for Ollama, API Key for others */}
                   {p.id === "ollama" ? (
                     <input
                       type="text"
@@ -383,12 +404,11 @@ export default function SettingsPage() {
                       type="password"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={p.keyPlaceholder}
+                      placeholder={settings.ai_api_key ? "•••••••• (key saved)" : p.keyPlaceholder}
                       className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
                     />
                   )}
 
-                  {/* Base URL (for non-Ollama, non-Gemini) */}
                   {p.id !== "ollama" && p.id !== "gemini" && (
                     <input
                       type="text"
@@ -398,13 +418,13 @@ export default function SettingsPage() {
                     />
                   )}
 
-                  {/* Model selector */}
+                  {/* Model selector — always a dropdown with fallback models */}
                   {loadingModels ? (
                     <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
                       <Loader2 className="w-3 h-3 animate-spin" />
                       Fetching available models...
                     </div>
-                  ) : availableModels.length > 0 ? (
+                  ) : displayModels.length > 0 ? (
                     <div className="space-y-1">
                       <div className="relative">
                         <select
@@ -420,7 +440,7 @@ export default function SettingsPage() {
                           }}
                           className="w-full appearance-none rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 pr-8 text-sm focus:border-emerald-500 focus:outline-none"
                         >
-                          {availableModels.map((m) => (
+                          {displayModels.map((m) => (
                             <option key={m} value={m}>
                               {m}
                             </option>
