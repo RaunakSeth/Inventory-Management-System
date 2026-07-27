@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Banner } from "@astryxdesign/core/Banner";
 import { Package, Search, Barcode, Trash2, AlertCircle, Tag, ChevronDown, ChevronUp } from "lucide-react";
 import type { ProductGroup } from "../lib/types";
 
@@ -102,23 +107,23 @@ export function Products() {
       </div>
 
       {errorMsg && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
-        </div>
+        <Banner
+          status="error"
+          title={errorMsg}
+          isDismissable
+          onDismiss={() => setErrorMsg(null)}
+        />
       )}
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-        <input
-          placeholder="Search by name, brand, or category..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-xl bg-slate-800 pl-10 pr-4 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition"
-          autoFocus
-        />
-      </div>
+      <TextInput
+        label="Search products"
+        isLabelHidden
+        value={search}
+        onChange={setSearch}
+        placeholder="Search by name, brand, or category..."
+        startIcon={<Search className="w-4 h-4" />}
+        hasClear
+      />
 
       {loading ? (
         <div className="space-y-3">
@@ -127,12 +132,11 @@ export function Products() {
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">
-            {search ? "No products match your search." : "No products yet. Scan a barcode to add one!"}
-          </p>
-        </div>
+        <EmptyState
+          title={search ? "No products match your search." : "No products yet"}
+          description={search ? "Try a different search term." : "Scan a barcode to add your first product!"}
+          icon={<Package />}
+        />
       ) : (
         <div className="space-y-2">
           {filtered.map((p) => (
@@ -299,37 +303,27 @@ function ProductCard({
           <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">
             {product.default_unit}
           </span>
-          <button
+          <IconButton
+            icon={<Trash2 className="w-3 h-3" />}
+            label="Delete product"
+            size="sm"
             onClick={onDeleteClick}
-            className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-red-900/50 transition"
-            title="Delete product"
-          >
-            <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-400" />
-          </button>
-          <button
+          />
+          <IconButton
+            icon={expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            label={expanded ? "Collapse" : "Expand"}
+            size="sm"
             onClick={() => setExpanded(!expanded)}
-            className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-slate-700 transition"
-          >
-            {expanded ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
-          </button>
+          />
         </div>
       </div>
 
       {expanded && (
         <div className="px-3 pb-3 space-y-3 border-t border-slate-800 pt-3">
           <div className="flex gap-2">
-            <label className="flex-1 text-xs text-slate-400">
-              Name
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full mt-0.5 rounded bg-slate-800 px-2 py-1 text-sm" />
-            </label>
-            <label className="flex-1 text-xs text-slate-400">
-              Category
-              <input value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className="w-full mt-0.5 rounded bg-slate-800 px-2 py-1 text-sm" />
-            </label>
-            <label className="flex-1 text-xs text-slate-400">
-              Brand
-              <input value={editBrand} onChange={(e) => setEditBrand(e.target.value)} className="w-full mt-0.5 rounded bg-slate-800 px-2 py-1 text-sm" />
-            </label>
+            <TextInput label="Name" value={editName} onChange={setEditName} size="sm" />
+            <TextInput label="Category" value={editCategory} onChange={setEditCategory} size="sm" />
+            <TextInput label="Brand" value={editBrand} onChange={setEditBrand} size="sm" />
           </div>
           <label className="block text-xs text-slate-400">
             Group
@@ -365,27 +359,28 @@ function ProductCard({
             </div>
             {editingTags && (
               <div className="flex gap-1 mt-1.5">
-                <input
+                <TextInput
+                  label=""
+                  isLabelHidden
                   value={newTagInput}
-                  onChange={(e) => setNewTagInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addTag()}
+                  onChange={setNewTagInput}
                   placeholder="New label name..."
-                  className="flex-1 rounded bg-slate-800 px-2 py-1 text-xs"
+                  size="sm"
                 />
-                <button onClick={addTag} className="px-2 py-1 rounded bg-emerald-600 text-xs">Add</button>
+                <Button label="Add" size="sm" variant="primary" onClick={addTag} />
               </div>
             )}
           </div>
 
           {errorMsg && <p className="text-red-400 text-xs">{errorMsg}</p>}
 
-          <button
+          <Button
+            label={saving ? "Saving..." : "Save changes"}
+            variant="primary"
+            isLoading={saving}
             onClick={saveDetails}
-            disabled={saving}
-            className="w-full py-1.5 rounded-lg bg-emerald-500 text-sm disabled:opacity-50"
-          >
-            {saving ? "Saving..." : "Save changes"}
-          </button>
+            width="100%"
+          />
         </div>
       )}
     </div>

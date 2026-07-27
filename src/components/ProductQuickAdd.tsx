@@ -4,6 +4,10 @@ import { identifyProductFromPhoto, lookupProductByBarcode, friendlyAIError } fro
 import { useNotifications } from "./Notifications";
 import { supabase } from "../lib/supabase";
 import type { ProductLookupResult, Store, QuantityUnit } from "../lib/types";
+import { Button } from "@astryxdesign/core/Button";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Spinner } from "@astryxdesign/core/Spinner";
 
 interface Props {
   barcode: string;
@@ -150,7 +154,7 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
     <div className="max-w-sm mx-auto space-y-3 rounded-xl bg-slate-900 p-4">
       <p className="text-xs text-slate-500">Barcode: {barcode}</p>
 
-      {stage === "looking_up" && <p>Looking up product…</p>}
+      {stage === "looking_up" && <Spinner label="Looking up product..." />}
 
       {stage === "needs_photo" && (
         <div className="space-y-2">
@@ -186,33 +190,16 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
 
       {(stage === "confirm" || stage === "saving") && (
         <div className="space-y-2">
-          <label className="block text-sm">
-            Name *
-            <input
-              className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Product name"
-            />
-          </label>
+          <TextInput
+            label="Name *"
+            value={name}
+            onChange={setName}
+            placeholder="Product name"
+            isRequired
+          />
           <div className="flex gap-2">
-            <label className="flex-1 text-sm">
-              Category
-              <input
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Grains, Dairy..."
-              />
-            </label>
-            <label className="flex-1 text-sm">
-              Brand
-              <input
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-              />
-            </label>
+            <TextInput label="Category" value={category} onChange={setCategory} placeholder="Grains, Dairy..." />
+            <TextInput label="Brand" value={brand} onChange={setBrand} />
           </div>
           <div className="flex gap-2">
             <label className="flex-1 text-sm">
@@ -228,30 +215,24 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
                 <option value="pcs">pcs</option>
               </select>
             </label>
-            <label className="flex-1 text-sm">
-              Qty to add
-              <input
-                type="number"
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-              />
-            </label>
-            <label className="flex-1 text-sm">
-              Reorder at
-              <input
-                type="number"
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-                value={minQuantity}
-                onChange={(e) => setMinQuantity(Number(e.target.value))}
-              />
-            </label>
+            <NumberInput
+              label="Qty to add"
+              value={quantity}
+              onChange={(val) => setQuantity(val ?? 1)}
+              min={0}
+            />
+            <NumberInput
+              label="Reorder at"
+              value={minQuantity}
+              onChange={(val) => setMinQuantity(val ?? 1)}
+              min={0}
+            />
           </div>
-          <label className="block text-sm">
+          <label className="block text-sm text-slate-400">
             Best before (optional)
             <input
               type="date"
-              className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+              className="w-full mt-1 rounded bg-slate-800 px-2 py-1 text-sm"
               value={bestBeforeDate}
               onChange={(e) => setBestBeforeDate(e.target.value)}
             />
@@ -270,27 +251,22 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
                 ))}
               </select>
             </label>
-            <label className="flex-1 text-sm">
-              Unit price (optional)
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-                value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
-                placeholder="0.00"
-              />
-            </label>
+            <NumberInput
+              label="Unit price (optional)"
+              value={unitPrice ? Number(unitPrice) : null}
+              onChange={(val) => setUnitPrice(val?.toString() ?? "")}
+              min={0}
+            />
           </div>
           {imageUrl && <img src={imageUrl} alt="Preview" className="w-16 h-16 rounded object-cover" />}
-          <button
+          <Button
+            label={stage === "saving" ? "Saving..." : "Save & add to stock"}
+            variant="primary"
+            isLoading={stage === "saving"}
+            isDisabled={!name.trim()}
             onClick={saveAndRestock}
-            disabled={stage === "saving" || !name.trim()}
-            className="w-full py-2 rounded-lg bg-emerald-500 disabled:opacity-50"
-          >
-            {stage === "saving" ? "Saving…" : "Save & add to stock"}
-          </button>
+            width="100%"
+          />
         </div>
       )}
 

@@ -7,6 +7,13 @@ import { identifyProductFromPhoto, friendlyAIError } from "../lib/edgeFunctions"
 import { useNotifications } from "../components/Notifications";
 import { supabase } from "../lib/supabase";
 import type { ProductLookupResult, Store, QuantityUnit } from "../lib/types";
+import { TabList, Tab } from "@astryxdesign/core/TabList";
+import { Button } from "@astryxdesign/core/Button";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Selector, SelectorOption } from "@astryxdesign/core/Selector";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Banner } from "@astryxdesign/core/Banner";
 import { ScanLine, Receipt, Camera, PenLine } from "lucide-react";
 
 type Mode = "barcode" | "bill" | "manual";
@@ -22,35 +29,11 @@ export function Scan() {
         <h1 className="text-xl font-bold">Scan</h1>
       </div>
 
-      <div className="flex gap-2 bg-slate-900 rounded-xl p-1 border border-slate-800">
-        <button
-          onClick={() => { setMode("barcode"); setScannedCode(null); }}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition ${
-            mode === "barcode" ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-slate-300"
-          }`}
-        >
-          <ScanLine className="w-4 h-4" />
-          Barcode
-        </button>
-        <button
-          onClick={() => setMode("manual")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition ${
-            mode === "manual" ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-slate-300"
-          }`}
-        >
-          <PenLine className="w-4 h-4" />
-          Manual
-        </button>
-        <button
-          onClick={() => setMode("bill")}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition ${
-            mode === "bill" ? "bg-emerald-500 text-white shadow-lg shadow-emerald-500/20" : "text-slate-400 hover:text-slate-300"
-          }`}
-        >
-          <Receipt className="w-4 h-4" />
-          Bill
-        </button>
-      </div>
+      <TabList value={mode} onChange={(v) => { setMode(v as Mode); setScannedCode(null); }}>
+        <Tab id="barcode" value="barcode" label="Barcode" icon={<ScanLine className="w-4 h-4" />} />
+        <Tab id="manual" value="manual" label="Manual" icon={<PenLine className="w-4 h-4" />} />
+        <Tab id="bill" value="bill" label="Bill" icon={<Receipt className="w-4 h-4" />} />
+      </TabList>
 
       {mode === "barcode" &&
         (scannedCode ? (
@@ -171,34 +154,17 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
     <div className="max-w-sm mx-auto space-y-3 rounded-xl bg-slate-900 p-4">
       <p className="text-sm font-medium text-slate-300">Add product manually</p>
 
-      <label className="block text-sm">
-        Name *
-        <input
-          className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Bananas, Cooking oil, Detergent..."
-        />
-      </label>
+      <TextInput
+        label="Name *"
+        value={name}
+        onChange={setName}
+        placeholder="e.g. Bananas, Cooking oil, Detergent..."
+        isRequired
+      />
 
       <div className="flex gap-2">
-        <label className="flex-1 text-sm">
-          Category
-          <input
-            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="Produce, Cleaning..."
-          />
-        </label>
-        <label className="flex-1 text-sm">
-          Brand
-          <input
-            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-            value={brand}
-            onChange={(e) => setBrand(e.target.value)}
-          />
-        </label>
+        <TextInput label="Category" value={category} onChange={setCategory} placeholder="Produce, Cleaning..." />
+        <TextInput label="Brand" value={brand} onChange={setBrand} />
       </div>
 
       <div className="flex gap-2">
@@ -215,31 +181,25 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
             <option value="pcs">pcs</option>
           </select>
         </label>
-        <label className="flex-1 text-sm">
-          Qty
-          <input
-            type="number"
-            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-          />
-        </label>
-        <label className="flex-1 text-sm">
-          Reorder at
-          <input
-            type="number"
-            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
-            value={minQuantity}
-            onChange={(e) => setMinQuantity(Number(e.target.value))}
-          />
-        </label>
+        <NumberInput
+          label="Qty"
+          value={quantity}
+          onChange={(val) => setQuantity(val ?? 1)}
+          min={0}
+        />
+        <NumberInput
+          label="Reorder at"
+          value={minQuantity}
+          onChange={(val) => setMinQuantity(val ?? 1)}
+          min={0}
+        />
       </div>
 
-      <label className="block text-sm">
+      <label className="block text-sm text-slate-400">
         Best before (optional)
         <input
           type="date"
-          className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+          className="w-full mt-1 rounded bg-slate-800 px-2 py-1 text-sm"
           value={bestBeforeDate}
           onChange={(e) => setBestBeforeDate(e.target.value)}
         />
@@ -284,12 +244,18 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
           />
         </div>
         <div className="flex gap-2">
-          <button onClick={identifyFromCamera} disabled={stage === "identifying"} className="flex-1 py-2 rounded-lg bg-emerald-600 text-sm disabled:opacity-50">
-            {stage === "identifying" ? "Identifying..." : "Snap & identify"}
-          </button>
-          <button onClick={() => fileRef.current?.click()} className="py-2 px-3 rounded-lg bg-slate-800 text-sm">
-            Upload
-          </button>
+          <Button
+            label={stage === "identifying" ? "Identifying..." : "Snap & identify"}
+            variant="primary"
+            isLoading={stage === "identifying"}
+            onClick={identifyFromCamera}
+            width="100%"
+          />
+          <Button
+            label="Upload"
+            variant="secondary"
+            onClick={() => fileRef.current?.click()}
+          />
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
         </div>
         {imageUrl && (
@@ -297,15 +263,16 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         )}
       </div>
 
-      {errorMsg && <p className="text-red-400 text-sm">{errorMsg}</p>}
+      {errorMsg && <Banner status="error" title={errorMsg} />}
 
-      <button
+      <Button
+        label={stage === "saving" ? "Saving..." : "Add to stock"}
+        variant="primary"
+        isLoading={stage === "saving"}
+        isDisabled={!name.trim()}
         onClick={saveItem}
-        disabled={stage === "saving" || !name.trim()}
-        className="w-full py-2.5 rounded-lg bg-emerald-500 font-medium disabled:opacity-50"
-      >
-        {stage === "saving" ? "Saving..." : "Add to stock"}
-      </button>
+        width="100%"
+      />
     </div>
   );
 }

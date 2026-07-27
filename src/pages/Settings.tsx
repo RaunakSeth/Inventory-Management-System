@@ -3,6 +3,12 @@ import { useSettings, type AIProvider } from "../lib/settings";
 import { useNotifications } from "../components/Notifications";
 import { supabase } from "../lib/supabase";
 import type { Store, QuantityUnit, ProductGroup } from "../lib/types";
+import { Button } from "@astryxdesign/core/Button";
+import { Switch } from "@astryxdesign/core/Switch";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Selector, SelectorOption } from "@astryxdesign/core/Selector";
 import { Settings, Key, Bell, Save, ExternalLink, Check, Zap, Loader2, ChevronDown, Store as StoreIcon, Package, Tag, Plus, Trash2 } from "lucide-react";
 
 interface ProviderCard {
@@ -369,9 +375,7 @@ export default function SettingsPage() {
               AI configured: {currentProvider?.name ?? "Custom"} — {model || "no model"}
             </span>
           </div>
-          <button onClick={handleDisconnect} className="text-xs text-red-400 hover:text-red-300">
-            Disable
-          </button>
+          <Button label="Disable" variant="ghost" size="sm" onClick={handleDisconnect} />
         </div>
       )}
 
@@ -406,16 +410,12 @@ export default function SettingsPage() {
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">{p.description}</p>
                 </div>
-                <button
+                <Button
+                  label={isSelected ? "Selected" : "Use"}
+                  variant={isSelected ? "primary" : "secondary"}
+                  size="sm"
                   onClick={() => selectProvider(p)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isSelected
-                      ? "bg-emerald-500 text-white"
-                      : "bg-slate-800 text-slate-300 hover:bg-slate-700"
-                  }`}
-                >
-                  {isSelected ? "Selected" : "Use"}
-                </button>
+                />
               </div>
 
               {isSelected && (
@@ -545,14 +545,14 @@ export default function SettingsPage() {
       </section>
 
       {/* Save Button */}
-      <button
+      <Button
+        label={saving ? "Saving..." : "Save Settings"}
+        variant="primary"
+        isLoading={saving}
+        icon={<Save className="w-4 h-4" />}
         onClick={handleSave}
-        disabled={saving}
-        className="w-full py-3 rounded-xl bg-emerald-500 font-semibold text-sm hover:bg-emerald-400 disabled:opacity-50 flex items-center justify-center gap-2"
-      >
-        <Save className="w-4 h-4" />
-        {saving ? "Saving..." : "Save Settings"}
-      </button>
+        width="100%"
+      />
 
       {/* Notifications */}
       <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-4">
@@ -563,38 +563,32 @@ export default function SettingsPage() {
 
         <label className="flex items-center justify-between">
           <span className="text-sm text-slate-300">Low stock alerts</span>
-          <input
-            type="checkbox"
-            checked={settings.notifications_low_stock}
-            onChange={(e) => handleSaveNotifications({ notifications_low_stock: e.target.checked })}
-            className="accent-emerald-500 w-4 h-4"
+          <Switch
+            label="Low stock alerts"
+            value={settings.notifications_low_stock}
+            onChange={(checked) => handleSaveNotifications({ notifications_low_stock: checked })}
+            isLabelHidden
           />
         </label>
 
         <label className="flex items-center justify-between">
           <span className="text-sm text-slate-300">Expiration warnings</span>
-          <input
-            type="checkbox"
-            checked={settings.notifications_expiring}
-            onChange={(e) => handleSaveNotifications({ notifications_expiring: e.target.checked })}
-            className="accent-emerald-500 w-4 h-4"
+          <Switch
+            label="Expiration warnings"
+            value={settings.notifications_expiring}
+            onChange={(checked) => handleSaveNotifications({ notifications_expiring: checked })}
+            isLabelHidden
           />
         </label>
 
         {settings.notifications_expiring && (
-          <label className="block text-sm">
-            <span className="text-slate-400">Days before expiry to warn</span>
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={settings.notifications_days_before_expiry}
-              onChange={(e) =>
-                handleSaveNotifications({ notifications_days_before_expiry: Number(e.target.value) })
-              }
-              className="w-full mt-1 rounded bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
-            />
-          </label>
+          <NumberInput
+            label="Days before expiry to warn"
+            value={settings.notifications_days_before_expiry}
+            onChange={(val) => handleSaveNotifications({ notifications_days_before_expiry: val ?? 3 })}
+            min={1}
+            max={30}
+          />
         )}
       </section>
 
@@ -610,15 +604,13 @@ export default function SettingsPage() {
               <span className="text-sm text-slate-200">{store.name}</span>
               {store.address && <span className="text-xs text-slate-500 ml-2">({store.address})</span>}
             </div>
-            <button onClick={() => deleteStore(store.id)} className="text-slate-500 hover:text-red-400">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+            <IconButton icon={<Trash2 className="w-3.5 h-3.5" />} label={`Delete ${store.name}`} size="sm" onClick={() => deleteStore(store.id)} />
           </div>
         ))}
         <div className="flex gap-2">
-          <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} placeholder="Store name" className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
-          <input value={newStoreAddress} onChange={(e) => setNewStoreAddress(e.target.value)} placeholder="Address (optional)" className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
-          <button onClick={addStore} disabled={!newStoreName.trim()} className="px-3 py-2 rounded-lg bg-emerald-500 text-white disabled:opacity-50"><Plus className="w-4 h-4" /></button>
+          <TextInput label="" isLabelHidden value={newStoreName} onChange={setNewStoreName} placeholder="Store name" size="sm" />
+          <TextInput label="" isLabelHidden value={newStoreAddress} onChange={setNewStoreAddress} placeholder="Address (optional)" size="sm" />
+          <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newStoreName.trim()} onClick={addStore} />
         </div>
       </section>
 
@@ -632,14 +624,14 @@ export default function SettingsPage() {
           {units.map((unit) => (
             <div key={unit.id} className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2.5 py-1.5 text-sm text-slate-300">
               <span>{unit.name}</span>
-              <button onClick={() => deleteUnit(unit.id)} className="text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+              <IconButton icon={<Trash2 className="w-3 h-3" />} label={`Delete ${unit.name}`} size="sm" onClick={() => deleteUnit(unit.id)} />
             </div>
           ))}
         </div>
         <div className="flex gap-2">
-          <input value={newUnitName} onChange={(e) => setNewUnitName(e.target.value)} placeholder="Unit (e.g. kg)" className="w-24 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
-          <input value={newUnitPlural} onChange={(e) => setNewUnitPlural(e.target.value)} placeholder="Plural (optional)" className="w-28 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
-          <button onClick={addUnit} disabled={!newUnitName.trim()} className="px-3 py-2 rounded-lg bg-emerald-500 text-white disabled:opacity-50"><Plus className="w-4 h-4" /></button>
+          <TextInput label="" isLabelHidden value={newUnitName} onChange={setNewUnitName} placeholder="Unit (e.g. kg)" size="sm" />
+          <TextInput label="" isLabelHidden value={newUnitPlural} onChange={setNewUnitPlural} placeholder="Plural (optional)" size="sm" />
+          <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newUnitName.trim()} onClick={addUnit} />
         </div>
       </section>
 
@@ -653,13 +645,13 @@ export default function SettingsPage() {
           {groups.map((group) => (
             <div key={group.id} className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2.5 py-1.5 text-sm text-slate-300">
               <span>{group.name}</span>
-              <button onClick={() => deleteGroup(group.id)} className="text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+              <IconButton icon={<Trash2 className="w-3 h-3" />} label={`Delete ${group.name}`} size="sm" onClick={() => deleteGroup(group.id)} />
             </div>
           ))}
         </div>
         <div className="flex gap-2">
-          <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Group name" className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
-          <button onClick={addGroup} disabled={!newGroupName.trim()} className="px-3 py-2 rounded-lg bg-emerald-500 text-white disabled:opacity-50"><Plus className="w-4 h-4" /></button>
+          <TextInput label="" isLabelHidden value={newGroupName} onChange={setNewGroupName} placeholder="Group name" size="sm" />
+          <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newGroupName.trim()} onClick={addGroup} />
         </div>
       </section>
     </div>

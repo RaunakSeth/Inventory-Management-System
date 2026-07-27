@@ -6,6 +6,14 @@ import { useSettings, type FieldId } from "../lib/settings";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
+import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Spinner } from "@astryxdesign/core/Spinner";
+import { StatusDot } from "@astryxdesign/core/StatusDot";
+import { Thumbnail } from "@astryxdesign/core/Thumbnail";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar, Store, DollarSign, Tag } from "lucide-react";
 import type { Location, ProductGroup } from "../lib/types";
 
@@ -357,11 +365,12 @@ export function Dashboard() {
       )}
 
       {errorMsg && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
-        </div>
+        <Banner
+          status="error"
+          title={errorMsg}
+          isDismissable
+          onDismiss={() => setErrorMsg(null)}
+        />
       )}
 
       {loading ? (
@@ -371,11 +380,11 @@ export function Dashboard() {
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No stock yet</p>
-          <p className="text-xs mt-1">Scan a barcode or a bill to add your first item.</p>
-        </div>
+        <EmptyState
+          title="No stock yet"
+          description="Scan a barcode or a bill to add your first item."
+          icon={<Package />}
+        />
       ) : (
         <>
           {lowRows.length > 0 && (
@@ -460,13 +469,12 @@ export function Dashboard() {
                   const label = t.quantity_change > 0 ? "+" : "";
                   return (
                     <div key={t.id} className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-800/30">
-                      <div className="w-8 h-8 rounded bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                        {p?.image_url ? (
-                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <img src={FALLBACK_IMG} alt="" className="w-4 h-4 opacity-50" />
-                        )}
-                      </div>
+                      <Thumbnail
+                        src={p?.image_url || FALLBACK_IMG}
+                        alt={p?.name ?? ""}
+                        label={p?.name ?? ""}
+                        className="w-8 h-8"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm truncate">{p?.name ?? "(unknown)"}</p>
                         <p className="text-[10px] text-slate-600 truncate">
@@ -537,19 +545,12 @@ function StockCard({
     >
       <div className="p-3 flex items-center gap-3">
         {visibleFields.includes("image") && (
-          <div className="w-10 h-10 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-            {row.image_url ? (
-              <img
-                src={row.image_url}
-                alt={row.product_name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-                onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMG; }}
-              />
-            ) : (
-              <img src={FALLBACK_IMG} alt="" className="w-5 h-5 opacity-50" />
-            )}
-          </div>
+          <Thumbnail
+            src={row.image_url || FALLBACK_IMG}
+            alt={row.product_name}
+            label={row.product_name}
+            className="w-10 h-10"
+          />
         )}
 
         <div className="min-w-0 flex-1">
@@ -578,42 +579,44 @@ function StockCard({
               onChange={(e) => setEditUnit(e.target.value)}
               className="w-12 rounded bg-slate-800 px-2 py-1 text-sm border border-slate-700"
             />
-            <button
+            <Button
+              label={saving ? "..." : "Save"}
+              size="sm"
+              variant="primary"
+              isLoading={saving}
               onClick={onSaveEdit}
-              disabled={saving}
-              className="text-xs bg-emerald-500 px-2 py-1 rounded disabled:opacity-50"
-            >
-              {saving ? "..." : "Save"}
-            </button>
-            <button onClick={onCancelEdit} className="text-xs text-slate-500 px-1">X</button>
+            />
+            <Button
+              label="Cancel"
+              size="sm"
+              variant="ghost"
+              onClick={onCancelEdit}
+            />
           </div>
         ) : (
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
+            <IconButton
+              icon={<Minus className="w-3 h-3" />}
+              label="Use 1"
+              size="sm"
               onClick={() => onQuickAdjust(-1)}
-              className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"
-              title="Use 1"
-            >
-              <Minus className="w-3 h-3 text-slate-400" />
-            </button>
+            />
             <button onClick={onStartEdit} className="text-right hover:text-emerald-400 transition">
               <p className="text-sm font-medium">{row.quantity}</p>
               <p className="text-[10px] text-slate-500 -mt-0.5">{row.unit}</p>
             </button>
-            <button
+            <IconButton
+              icon={<Plus className="w-3 h-3" />}
+              label="Add 1"
+              size="sm"
               onClick={() => onQuickAdjust(1)}
-              className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition"
-              title="Add 1"
-            >
-              <Plus className="w-3 h-3 text-slate-400" />
-            </button>
-            <button
+            />
+            <IconButton
+              icon={<Trash2 className="w-3 h-3" />}
+              label="Delete item"
+              size="sm"
               onClick={onDelete}
-              className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-red-900/50 transition ml-1"
-              title="Delete item"
-            >
-              <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-400" />
-            </button>
+            />
           </div>
         )}
       </div>
@@ -622,7 +625,7 @@ function StockCard({
         <div className="px-3 pb-2 flex items-center gap-2 flex-wrap">
           {visibleFields.includes("days_left") && row.estimated_days_remaining !== null && (
             <span className={"text-xs flex items-center gap-1 " + (isUrgent ? "text-red-400" : "text-amber-400")}>
-              <Clock className="w-3 h-3" />
+              <StatusDot variant={isUrgent ? "error" : "warning"} label={isUrgent ? "Urgent" : "Low"} />
               ~{row.estimated_days_remaining < 1 ? "<1" : row.estimated_days_remaining} day{row.estimated_days_remaining !== 1 ? "s" : ""} left
             </span>
           )}
