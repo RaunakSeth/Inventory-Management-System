@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useNotifications } from "../components/Notifications";
+import { useSettings, type FieldId } from "../lib/settings";
 import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar } from "lucide-react";
 import type { Location } from "../lib/types";
 
@@ -9,6 +10,8 @@ interface StockRow {
   product_id: string;
   product_name: string;
   category: string | null;
+  brand: string | null;
+  barcode: string | null;
   quantity: number;
   unit: string;
   min_quantity: number;
@@ -17,6 +20,7 @@ interface StockRow {
   location_name: string | null;
   image_url: string | null;
   best_before_date: string | null;
+  last_restocked_at: string | null;
 }
 
 const FALLBACK_IMG =
@@ -32,6 +36,7 @@ function daysUntil(dateStr: string): number {
 
 export function Dashboard() {
   const { addNotification } = useNotifications();
+  const { settings } = useSettings();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -51,7 +56,7 @@ export function Dashboard() {
       .select(`
         id, product_id, quantity, unit, min_quantity,
         avg_daily_consumption, last_restocked_at, best_before_date,
-        product_library!inner(name, category, image_url),
+        product_library!inner(name, category, brand, barcode, image_url),
         locations(name)
       `)
       .order("quantity", { ascending: true });
@@ -65,6 +70,8 @@ export function Dashboard() {
           product_id: r.product_id,
           product_name: r.product_library?.name ?? "(unknown)",
           category: r.product_library?.category ?? null,
+          brand: r.product_library?.brand ?? null,
+          barcode: r.product_library?.barcode ?? null,
           quantity: qty,
           unit: r.unit,
           min_quantity: r.min_quantity,
@@ -73,6 +80,7 @@ export function Dashboard() {
           location_name: r.locations?.name ?? null,
           image_url: r.product_library?.image_url ?? null,
           best_before_date: r.best_before_date ?? null,
+          last_restocked_at: r.last_restocked_at ?? null,
         };
       });
       setRows(mapped);
@@ -336,6 +344,7 @@ export function Dashboard() {
                   locations={allLocations}
                   onAssignLocation={(locId) => assignLocation(row.stock_item_id, locId)}
                   activatingLocation={activatingLocation}
+                  visibleFields={settings.visible_fields}
                 />
               ))}
             </div>
@@ -370,6 +379,7 @@ export function Dashboard() {
                   locations={allLocations}
                   onAssignLocation={(locId) => assignLocation(row.stock_item_id, locId)}
                   activatingLocation={activatingLocation}
+                  visibleFields={settings.visible_fields}
                 />
               ))}
             </div>
@@ -434,6 +444,7 @@ function StockCard({
   locations,
   onAssignLocation,
   activatingLocation,
+  visibleFields,
 }: {
   row: StockRow;
   isLow: boolean;
@@ -454,6 +465,7 @@ function StockCard({
   locations: Location[];
   onAssignLocation: (locationId: string | null) => void;
   activatingLocation: string | null;
+  visibleFields: FieldId[];
 }) {
   const isEditing = editingId === row.stock_item_id;
   const isDeleting = confirmDelete === row.stock_item_id;
@@ -490,25 +502,31 @@ function StockCard({
       )}
     >
       <div className="p-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-          {row.image_url ? (
-            <img
-              src={row.image_url}
-              alt={row.product_name}
-              className="w-full h-full object-cover"
-              loading="lazy"
-              onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMG; }}
-            />
-          ) : (
-            <img src={FALLBACK_IMG} alt="" className="w-5 h-5 opacity-50" />
-          )}
-        </div>
+        {visibleFields.includes("image") && (
+          <div className="w-10 h-10 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
+            {row.image_url ? (
+              <img
+                src={row.image_url}
+                alt={row.product_name}
+                className="w-full h-full object-cover"
+                loading="lazy"
+                onError={(e) => { (e.target as HTMLImageElement).src = FALLBACK_IMG; }}
+              />
+            ) : (
+              <img src={FALLBACK_IMG} alt="" className="w-5 h-5 opacity-50" />
+            )}
+          </div>
+        )}
 
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-sm truncate">{row.product_name}</p>
-          <p className="text-xs text-slate-500 truncate">
-            {row.category || "\u00a0"}
-          </p>
+          {visibleFields.includes("name") && (
+            <p className="font-medium text-sm truncate">{row.product_name}</p>
+          )}
+          {visibleFields.includes("category") && (
+            <p className="text-xs text-slate-500 truncate">
+              {row.category || "\u00a0"}
+            </p>
+          )}
         </div>
 
         {isEditing ? (
@@ -568,30 +586,32 @@ function StockCard({
 
       {!isEditing && (
         <div className="px-3 pb-2 flex items-center gap-2 flex-wrap">
-          {row.estimated_days_remaining !== null && (
+          {visibleFields.includes("days_left") && row.estimated_days_remaining !== null && (
             <span className={"text-xs flex items-center gap-1 " + (isUrgent ? "text-red-400" : "text-amber-400")}>
               <Clock className="w-3 h-3" />
               ~{row.estimated_days_remaining < 1 ? "<1" : row.estimated_days_remaining} day{row.estimated_days_remaining !== 1 ? "s" : ""} left
             </span>
           )}
-          <span className="text-xs text-slate-500 flex items-center gap-1">
-            <MapPin className="w-3 h-3" />
-            {activatingLocation === row.stock_item_id ? (
-              <span className="text-slate-400">Saving...</span>
-            ) : (
-              <select
-                value={row.location_name ? row.location_name : ""}
-                onChange={(e) => onAssignLocation(e.target.value || null)}
-                className="bg-transparent border-none text-xs text-slate-400 cursor-pointer outline-none"
-              >
-                <option value="">{row.location_name || "No location"}</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id} selected={row.location_name === l.name}>{l.name}</option>
-                ))}
-              </select>
-            )}
-          </span>
-          {row.best_before_date && (() => {
+          {visibleFields.includes("location") && (
+            <span className="text-xs text-slate-500 flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              {activatingLocation === row.stock_item_id ? (
+                <span className="text-slate-400">Saving...</span>
+              ) : (
+                <select
+                  value={row.location_name ? row.location_name : ""}
+                  onChange={(e) => onAssignLocation(e.target.value || null)}
+                  className="bg-transparent border-none text-xs text-slate-400 cursor-pointer outline-none"
+                >
+                  <option value="">{row.location_name || "No location"}</option>
+                  {locations.map((l) => (
+                    <option key={l.id} value={l.id} selected={row.location_name === l.name}>{l.name}</option>
+                  ))}
+                </select>
+              )}
+            </span>
+          )}
+          {visibleFields.includes("best_before") && row.best_before_date && (() => {
             const days = daysUntil(row.best_before_date);
             const expired = days < 0;
             const soon = days <= 3;
@@ -602,6 +622,21 @@ function StockCard({
               </span>
             );
           })()}
+          {visibleFields.includes("consumption") && row.avg_daily_consumption != null && row.avg_daily_consumption > 0 && (
+            <span className="text-[10px] text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
+              {row.avg_daily_consumption} {row.unit}/day
+            </span>
+          )}
+          {visibleFields.includes("min_quantity") && row.min_quantity > 0 && (
+            <span className="text-[10px] text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
+              min {row.min_quantity}
+            </span>
+          )}
+          {visibleFields.includes("last_restocked") && row.last_restocked_at && (
+            <span className="text-[10px] text-slate-600">
+              Restocked {new Date(row.last_restocked_at).toLocaleDateString()}
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -3,6 +3,32 @@ import { supabase } from "./supabase";
 
 export type AIProvider = "gemini" | "openai_compatible" | "none";
 
+export type FieldId =
+  | "image" | "name" | "category" | "brand" | "barcode"
+  | "quantity" | "min_quantity" | "consumption" | "days_left"
+  | "location" | "best_before" | "tags" | "last_restocked";
+
+export const ALL_FIELDS: { id: FieldId; label: string }[] = [
+  { id: "image", label: "Product image" },
+  { id: "name", label: "Product name" },
+  { id: "category", label: "Category" },
+  { id: "brand", label: "Brand" },
+  { id: "barcode", label: "Barcode" },
+  { id: "quantity", label: "Quantity" },
+  { id: "min_quantity", label: "Reorder at" },
+  { id: "consumption", label: "Consumption rate" },
+  { id: "days_left", label: "Days remaining" },
+  { id: "location", label: "Location" },
+  { id: "best_before", label: "Best before" },
+  { id: "tags", label: "Labels" },
+  { id: "last_restocked", label: "Last restocked" },
+];
+
+export const DEFAULT_VISIBLE_FIELDS: FieldId[] = [
+  "image", "name", "category", "quantity", "min_quantity",
+  "location", "best_before", "consumption", "tags",
+];
+
 export interface UserSettings {
   id?: string;
   user_id: string;
@@ -17,6 +43,7 @@ export interface UserSettings {
   notifications_low_stock: boolean;
   notifications_expiring: boolean;
   notifications_days_before_expiry: number;
+  visible_fields: FieldId[];
 }
 
 interface SettingsContextValue {
@@ -42,6 +69,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     notifications_low_stock: true,
     notifications_expiring: true,
     notifications_days_before_expiry: 3,
+    visible_fields: DEFAULT_VISIBLE_FIELDS,
   });
   const [loading, setLoading] = useState(true);
 
