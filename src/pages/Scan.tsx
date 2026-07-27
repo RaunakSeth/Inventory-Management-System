@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Webcam from "react-webcam";
 import { BarcodeScanner } from "../components/BarcodeScanner";
 import { BillScanner } from "../components/BillScanner";
@@ -6,7 +6,7 @@ import { ProductQuickAdd } from "../components/ProductQuickAdd";
 import { identifyProductFromPhoto, friendlyAIError } from "../lib/edgeFunctions";
 import { useNotifications } from "../components/Notifications";
 import { supabase } from "../lib/supabase";
-import type { ProductLookupResult } from "../lib/types";
+import type { ProductLookupResult, Store, QuantityUnit } from "../lib/types";
 import { ScanLine, Receipt, Camera, PenLine } from "lucide-react";
 
 type Mode = "barcode" | "bill" | "manual";
@@ -78,9 +78,18 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
   const [bestBeforeDate, setBestBeforeDate] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string>("");
+  const [unitPrice, setUnitPrice] = useState<string>("");
+  const [stores, setStores] = useState<Store[]>([]);
+  const [units, setUnits] = useState<QuantityUnit[]>([]);
   const webcamRef = useRef<Webcam>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { addNotification } = useNotifications();
+
+  useEffect(() => {
+    supabase.from("stores").select("*").order("name").then(({ data }) => setStores(data ?? []));
+    supabase.from("quantity_units").select("*").order("name").then(({ data }) => setUnits(data ?? []));
+  }, []);
 
   async function identifyFromCamera() {
     const dataUrl = webcamRef.current?.getScreenshot();
@@ -144,6 +153,8 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         type: "restock",
         quantity_change: quantity,
         note: "Manual add",
+        store_id: storeId || null,
+        unit_price: unitPrice ? Number(unitPrice) : null,
       });
 
       onDone();
@@ -193,11 +204,16 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
       <div className="flex gap-2">
         <label className="flex-1 text-sm">
           Unit
-          <input
+          <select
             className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
-          />
+          >
+            {units.map((u) => (
+              <option key={u.id} value={u.name}>{u.name}</option>
+            ))}
+            <option value="pcs">pcs</option>
+          </select>
         </label>
         <label className="flex-1 text-sm">
           Qty
@@ -228,6 +244,34 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
           onChange={(e) => setBestBeforeDate(e.target.value)}
         />
       </label>
+
+      <div className="flex gap-2">
+        <label className="flex-1 text-sm">
+          Store (optional)
+          <select
+            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+          >
+            <option value="">None</option>
+            {stores.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex-1 text-sm">
+          Unit price (optional)
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+            value={unitPrice}
+            onChange={(e) => setUnitPrice(e.target.value)}
+            placeholder="0.00"
+          />
+        </label>
+      </div>
 
       <div className="space-y-1">
         <p className="text-sm text-slate-400">Photo (optional)</p>

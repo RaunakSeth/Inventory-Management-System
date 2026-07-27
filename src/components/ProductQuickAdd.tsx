@@ -3,7 +3,7 @@ import Webcam from "react-webcam";
 import { identifyProductFromPhoto, lookupProductByBarcode, friendlyAIError } from "../lib/edgeFunctions";
 import { useNotifications } from "./Notifications";
 import { supabase } from "../lib/supabase";
-import type { ProductLookupResult } from "../lib/types";
+import type { ProductLookupResult, Store, QuantityUnit } from "../lib/types";
 
 interface Props {
   barcode: string;
@@ -26,7 +26,16 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [bestBeforeDate, setBestBeforeDate] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [storeId, setStoreId] = useState<string>("");
+  const [unitPrice, setUnitPrice] = useState<string>("");
+  const [stores, setStores] = useState<Store[]>([]);
+  const [units, setUnits] = useState<QuantityUnit[]>([]);
   const { addNotification } = useNotifications();
+
+  useEffect(() => {
+    supabase.from("stores").select("*").order("name").then(({ data }) => setStores(data ?? []));
+    supabase.from("quantity_units").select("*").order("name").then(({ data }) => setUnits(data ?? []));
+  }, []);
 
   useEffect(() => {
     lookupProductByBarcode(barcode)
@@ -126,6 +135,8 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
         type: "restock",
         quantity_change: quantity,
         note: "Quick-add via barcode scan",
+        store_id: storeId || null,
+        unit_price: unitPrice ? Number(unitPrice) : null,
       });
 
       onDone();
@@ -206,11 +217,16 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
           <div className="flex gap-2">
             <label className="flex-1 text-sm">
               Unit
-              <input
+              <select
                 className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
-              />
+              >
+                {units.map((u) => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+                <option value="pcs">pcs</option>
+              </select>
             </label>
             <label className="flex-1 text-sm">
               Qty to add
@@ -240,6 +256,33 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
               onChange={(e) => setBestBeforeDate(e.target.value)}
             />
           </label>
+          <div className="flex gap-2">
+            <label className="flex-1 text-sm">
+              Store (optional)
+              <select
+                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+              >
+                <option value="">None</option>
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex-1 text-sm">
+              Unit price (optional)
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value)}
+                placeholder="0.00"
+              />
+            </label>
+          </div>
           {imageUrl && <img src={imageUrl} alt="Preview" className="w-16 h-16 rounded object-cover" />}
           <button
             onClick={saveAndRestock}

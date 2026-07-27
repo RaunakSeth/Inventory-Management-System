@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Package, Search, Barcode, Trash2, AlertCircle, Tag, ChevronDown, ChevronUp } from "lucide-react";
+import type { ProductGroup } from "../lib/types";
 
 interface Product {
   id: string;
@@ -12,6 +13,7 @@ interface Product {
   default_unit: string;
   barcode: string | null;
   image_url: string | null;
+  product_group_id: string | null;
 }
 
 interface TagRecord {
@@ -40,12 +42,13 @@ export function Products() {
   const [editName, setEditName] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editBrand, setEditBrand] = useState("");
+  const [allGroups, setAllGroups] = useState<ProductGroup[]>([]);
 
   async function fetchProducts() {
     setLoading(true);
     const { data, error } = await supabase
       .from("product_library")
-      .select("id, name, category, brand, default_unit, barcode, image_url")
+      .select("id, name, category, brand, default_unit, barcode, image_url, product_group_id")
       .order("name");
     if (!error && data) setProducts(data as Product[]);
     setLoading(false);
@@ -59,6 +62,7 @@ export function Products() {
   useEffect(() => {
     fetchProducts();
     fetchTags();
+    supabase.from("product_groups").select("*").order("name").then(({ data }) => setAllGroups(data ?? []));
   }, []);
 
   useEffect(() => {
@@ -136,6 +140,7 @@ export function Products() {
                 key={p.id}
                 product={p}
                 tags={tags}
+                groups={allGroups}
                 onTagsChanged={fetchTags}
                 onUpdated={fetchProducts}
                 onDeleteClick={() => showConfirm({
@@ -155,12 +160,14 @@ export function Products() {
 function ProductCard({
   product,
   tags,
+  groups,
   onTagsChanged,
   onUpdated,
   onDeleteClick,
 }: {
   product: Product;
   tags: TagRecord[];
+  groups: ProductGroup[];
   onTagsChanged: () => void;
   onUpdated: () => void;
   onDeleteClick: () => void;
@@ -173,6 +180,7 @@ function ProductCard({
   const [editName, setEditName] = useState(product.name);
   const [editCategory, setEditCategory] = useState(product.category ?? "");
   const [editBrand, setEditBrand] = useState(product.brand ?? "");
+  const [editGroupId, setEditGroupId] = useState<string>(product.product_group_id ?? "");
   const [productTags, setProductTags] = useState<TagRecord[]>([]);
 
   useEffect(() => {
@@ -196,6 +204,7 @@ function ProductCard({
         name: editName.trim(),
         category: editCategory || null,
         brand: editBrand || null,
+        product_group_id: editGroupId || null,
       })
       .eq("id", product.id);
     if (error) setErrorMsg(error.message);
@@ -261,6 +270,11 @@ function ProductCard({
           <p className="text-xs text-slate-500 truncate">
             {[product.category, product.brand].filter(Boolean).join(" · ") || "\u00a0"}
           </p>
+          {product.product_group_id && (
+            <p className="text-[10px] text-emerald-400 mt-0.5">
+              {groups.find((g) => g.id === product.product_group_id)?.name ?? ""}
+            </p>
+          )}
           {product.barcode && (
             <p className="text-[10px] text-slate-600 font-mono mt-0.5 flex items-center gap-1">
               <Barcode className="w-3 h-3" />
@@ -317,6 +331,15 @@ function ProductCard({
               <input value={editBrand} onChange={(e) => setEditBrand(e.target.value)} className="w-full mt-0.5 rounded bg-slate-800 px-2 py-1 text-sm" />
             </label>
           </div>
+          <label className="block text-xs text-slate-400">
+            Group
+            <select value={editGroupId} onChange={(e) => setEditGroupId(e.target.value)} className="w-full mt-0.5 rounded bg-slate-800 px-2 py-1 text-sm">
+              <option value="">None</option>
+              {groups.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </label>
 
           <div>
             <div className="flex items-center gap-2 mb-1">

@@ -6,8 +6,8 @@ import { useSettings, type FieldId } from "../lib/settings";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Card } from "@astryxdesign/core/Card";
 import { Badge } from "@astryxdesign/core/Badge";
-import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar } from "lucide-react";
-import type { Location } from "../lib/types";
+import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar, Store, DollarSign, Tag } from "lucide-react";
+import type { Location, ProductGroup } from "../lib/types";
 
 interface StockRow {
   stock_item_id: string;
@@ -25,6 +25,7 @@ interface StockRow {
   image_url: string | null;
   best_before_date: string | null;
   last_restocked_at: string | null;
+  product_group_id: string | null;
 }
 
 const FALLBACK_IMG =
@@ -52,6 +53,9 @@ export function Dashboard() {
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [allLocations, setAllLocations] = useState<Location[]>([]);
   const [activatingLocation, setActivatingLocation] = useState<string | null>(null);
+  const [allGroups, setAllGroups] = useState<ProductGroup[]>([]);
+  const [selectedGroup, setSelectedGroup] = useState<string>("all");
+  const [inventoryValue, setInventoryValue] = useState<number | null>(null);
 
   async function fetchStock() {
     setLoading(true);
@@ -60,7 +64,7 @@ export function Dashboard() {
       .select(`
         id, product_id, quantity, unit, min_quantity,
         avg_daily_consumption, last_restocked_at, best_before_date,
-        product_library!inner(name, category, brand, barcode, image_url),
+        product_library!inner(name, category, brand, barcode, image_url, product_group_id),
         locations(name)
       `)
       .order("quantity", { ascending: true });
@@ -85,6 +89,7 @@ export function Dashboard() {
           image_url: r.product_library?.image_url ?? null,
           best_before_date: r.best_before_date ?? null,
           last_restocked_at: r.last_restocked_at ?? null,
+          product_group_id: r.product_library?.product_group_id ?? null,
         };
       });
       setRows(mapped);
@@ -177,13 +182,35 @@ export function Dashboard() {
     if (data) setAllLocations(data as Location[]);
   }
 
+  async function fetchGroups() {
+    const { data } = await supabase.from("product_groups").select("*").order("name");
+    if (data) setAllGroups(data as ProductGroup[]);
+  }
+
+  async function fetchInventoryValue() {
+    const { data } = await supabase
+      .from("transactions")
+      .select("unit_price, quantity_change, stock_item_id")
+      .not("unit_price", "is", null);
+    if (data && data.length > 0) {
+      let total = 0;
+      for (const t of data) {
+        if (t.unit_price && t.quantity_change > 0) {
+          total += t.unit_price * t.quantity_change;
+        }
+      }
+      setInventoryValue(total);
+    }
+  }
+
   async function fetchRecentTransactions() {
     const { data } = await supabase
       .from("transactions")
       .select(`
-        id, type, quantity_change, created_at, note,
+        id, type, quantity_change, created_at, note, unit_price, store_id,
         stock_item_id,
-        stock_items!inner(product_id, product_library!inner(name, image_url))
+        stock_items!inner(product_id, product_library!inner(name, image_url)),
+        stores(name)
       `)
       .order("created_at", { ascending: false })
       .limit(5);
@@ -194,9 +221,12 @@ export function Dashboard() {
     fetchStock();
     fetchLocations();
     fetchRecentTransactions();
+    fetchGroups();
+    fetchInventoryValue();
   }, []);
 
   const lowRows = rows.filter((r) => {
+    if (selectedGroup !== "all" && r.product_group_id !== selectedGroup) return false;
     if (r.avg_daily_consumption && r.avg_daily_consumption > 0) {
       return r.quantity / r.avg_daily_consumption <= 3;
     }
@@ -207,6 +237,8 @@ export function Dashboard() {
     if (r.quantity < r.min_quantity) return true;
     return false;
   });
+
+  const filteredRows = selectedGroup === "all" ? rows : rows.filter((r) => r.product_group_id === selectedGroup);
 
   function startEdit(row: StockRow) {
     setErrorMsg(null);
@@ -301,6 +333,29 @@ export function Dashboard() {
         )}
       </div>
 
+      {!loading && inventoryValue !== null && inventoryValue > 0 && (
+        <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5">
+          <DollarSign className="w-4 h-4 text-emerald-400" />
+          <span className="text-sm text-emerald-300">Inventory value: <span className="font-semibold">${inventoryValue.toFixed(2)}</span></span>
+        </div>
+      )}
+
+      {allGroups.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Tag className="w-4 h-4 text-slate-400" />
+          <select
+            value={selectedGroup}
+            onChange={(e) => setSelectedGroup(e.target.value)}
+            className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none"
+          >
+            <option value="all">All groups</option>
+            {allGroups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {errorMsg && (
         <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -358,11 +413,11 @@ export function Dashboard() {
           <details className="group">
             <summary className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer hover:text-slate-300 transition py-2">
               <Package className="w-4 h-4" />
-              All Stock ({rows.length})
+              All Stock ({filteredRows.length})
               <Plus className="w-3 h-3 ml-auto group-open:rotate-45 transition" />
             </summary>
             <div className="space-y-2 mt-2">
-              {rows.map((row) => (
+              {filteredRows.map((row) => (
                 <StockCard
                   key={row.stock_item_id}
                   row={row}
@@ -414,7 +469,10 @@ export function Dashboard() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm truncate">{p?.name ?? "(unknown)"}</p>
-                        <p className="text-[10px] text-slate-600 truncate">{t.note || t.type}</p>
+                        <p className="text-[10px] text-slate-600 truncate">
+                          {t.note || t.type}
+                          {t.stores?.name ? ` · ${t.stores.name}` : ""}
+                        </p>
                       </div>
                       <p className={"text-sm font-mono " + icon}>
                         {label}{t.quantity_change}

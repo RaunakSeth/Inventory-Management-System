@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSettings, type AIProvider } from "../lib/settings";
 import { useNotifications } from "../components/Notifications";
-import { Settings, Key, Bell, Save, ExternalLink, Check, Zap, Loader2, ChevronDown } from "lucide-react";
+import { supabase } from "../lib/supabase";
+import type { Store, QuantityUnit, ProductGroup } from "../lib/types";
+import { Settings, Key, Bell, Save, ExternalLink, Check, Zap, Loader2, ChevronDown, Store as StoreIcon, Package, Tag, Plus, Trash2 } from "lucide-react";
 
 interface ProviderCard {
   id: string;
@@ -167,6 +169,15 @@ export default function SettingsPage() {
   const [loadingModels, setLoadingModels] = useState(false);
   const [showCustomModel, setShowCustomModel] = useState(false);
 
+  const [stores, setStores] = useState<Store[]>([]);
+  const [newStoreName, setNewStoreName] = useState("");
+  const [newStoreAddress, setNewStoreAddress] = useState("");
+  const [units, setUnits] = useState<QuantityUnit[]>([]);
+  const [newUnitName, setNewUnitName] = useState("");
+  const [newUnitPlural, setNewUnitPlural] = useState("");
+  const [groups, setGroups] = useState<ProductGroup[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+
   // Reload settings from DB whenever component mounts or settings change
   useEffect(() => {
     setApiKey(settings.ai_api_key ?? "");
@@ -237,6 +248,13 @@ export default function SettingsPage() {
     return () => clearTimeout(timer);
   }, [baseUrl, selectedProvider]);
 
+  // Fetch stores, units, groups
+  useEffect(() => {
+    supabase.from("stores").select("*").order("name").then(({ data }) => setStores(data ?? []));
+    supabase.from("quantity_units").select("*").order("name").then(({ data }) => setUnits(data ?? []));
+    supabase.from("product_groups").select("*").order("name").then(({ data }) => setGroups(data ?? []));
+  }, []);
+
   async function handleSave() {
     setSaving(true);
     await updateSettings({
@@ -271,6 +289,50 @@ export default function SettingsPage() {
 
   async function handleSaveNotifications(patch: Partial<typeof settings>) {
     await updateSettings(patch);
+  }
+
+  async function addStore() {
+    if (!newStoreName.trim()) return;
+    const { data, error } = await supabase.from("stores").insert({ name: newStoreName.trim(), address: newStoreAddress.trim() || null }).select().single();
+    if (error) { addNotification({ type: "error", title: error.message }); return; }
+    setStores([...stores, data]);
+    setNewStoreName("");
+    setNewStoreAddress("");
+    addNotification({ type: "success", title: "Store added" });
+  }
+
+  async function deleteStore(id: string) {
+    await supabase.from("stores").delete().eq("id", id);
+    setStores(stores.filter((s) => s.id !== id));
+  }
+
+  async function addUnit() {
+    if (!newUnitName.trim()) return;
+    const { data, error } = await supabase.from("quantity_units").insert({ name: newUnitName.trim(), name_plural: newUnitPlural.trim() || null }).select().single();
+    if (error) { addNotification({ type: "error", title: error.message }); return; }
+    setUnits([...units, data]);
+    setNewUnitName("");
+    setNewUnitPlural("");
+    addNotification({ type: "success", title: "Unit added" });
+  }
+
+  async function deleteUnit(id: string) {
+    await supabase.from("quantity_units").delete().eq("id", id);
+    setUnits(units.filter((u) => u.id !== id));
+  }
+
+  async function addGroup() {
+    if (!newGroupName.trim()) return;
+    const { data, error } = await supabase.from("product_groups").insert({ name: newGroupName.trim() }).select().single();
+    if (error) { addNotification({ type: "error", title: error.message }); return; }
+    setGroups([...groups, data]);
+    setNewGroupName("");
+    addNotification({ type: "success", title: "Group added" });
+  }
+
+  async function deleteGroup(id: string) {
+    await supabase.from("product_groups").delete().eq("id", id);
+    setGroups(groups.filter((g) => g.id !== id));
   }
 
   const isConfigured = !!settings.ai_api_key || !!settings.oauth_access_token;
@@ -534,6 +596,71 @@ export default function SettingsPage() {
             />
           </label>
         )}
+      </section>
+
+      {/* Stores */}
+      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-slate-300">
+          <StoreIcon className="w-4 h-4" />
+          <h2 className="font-semibold">Stores</h2>
+        </div>
+        {stores.map((store) => (
+          <div key={store.id} className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0">
+            <div>
+              <span className="text-sm text-slate-200">{store.name}</span>
+              {store.address && <span className="text-xs text-slate-500 ml-2">({store.address})</span>}
+            </div>
+            <button onClick={() => deleteStore(store.id)} className="text-slate-500 hover:text-red-400">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <input value={newStoreName} onChange={(e) => setNewStoreName(e.target.value)} placeholder="Store name" className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
+          <input value={newStoreAddress} onChange={(e) => setNewStoreAddress(e.target.value)} placeholder="Address (optional)" className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
+          <button onClick={addStore} disabled={!newStoreName.trim()} className="px-3 py-2 rounded-lg bg-emerald-500 text-white disabled:opacity-50"><Plus className="w-4 h-4" /></button>
+        </div>
+      </section>
+
+      {/* Quantity Units */}
+      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-slate-300">
+          <Package className="w-4 h-4" />
+          <h2 className="font-semibold">Quantity Units</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {units.map((unit) => (
+            <div key={unit.id} className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2.5 py-1.5 text-sm text-slate-300">
+              <span>{unit.name}</span>
+              <button onClick={() => deleteUnit(unit.id)} className="text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input value={newUnitName} onChange={(e) => setNewUnitName(e.target.value)} placeholder="Unit (e.g. kg)" className="w-24 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
+          <input value={newUnitPlural} onChange={(e) => setNewUnitPlural(e.target.value)} placeholder="Plural (optional)" className="w-28 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
+          <button onClick={addUnit} disabled={!newUnitName.trim()} className="px-3 py-2 rounded-lg bg-emerald-500 text-white disabled:opacity-50"><Plus className="w-4 h-4" /></button>
+        </div>
+      </section>
+
+      {/* Product Groups */}
+      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
+        <div className="flex items-center gap-2 text-slate-300">
+          <Tag className="w-4 h-4" />
+          <h2 className="font-semibold">Product Groups</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {groups.map((group) => (
+            <div key={group.id} className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2.5 py-1.5 text-sm text-slate-300">
+              <span>{group.name}</span>
+              <button onClick={() => deleteGroup(group.id)} className="text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Group name" className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none" />
+          <button onClick={addGroup} disabled={!newGroupName.trim()} className="px-3 py-2 rounded-lg bg-emerald-500 text-white disabled:opacity-50"><Plus className="w-4 h-4" /></button>
+        </div>
       </section>
     </div>
   );
