@@ -77,14 +77,64 @@ export function Dashboard() {
       });
       setRows(mapped);
 
-      const lowItems = mapped.filter((r) => r.quantity <= r.min_quantity);
-      if (lowItems.length > 0) {
-        addNotification({
-          type: "warning",
-          title: "Low Stock Alert",
-          message: `${lowItems.length} item${lowItems.length > 1 ? "s" : ""} running low: ${lowItems.slice(0, 3).map((r) => r.product_name).join(", ")}${lowItems.length > 3 ? "..." : ""}`,
-          duration: 8000,
-        });
+      // Smart notifications — only alert when stock is actually running out
+      const now = new Date();
+      const smartAlerts: { row: StockRow; reason: string; urgency: "high" | "medium" | "low" }[] = [];
+
+      for (const r of mapped) {
+        // 1. Has consumption data → use days remaining
+        if (r.avg_daily_consumption && r.avg_daily_consumption > 0) {
+          const daysLeft = r.quantity / r.avg_daily_consumption;
+          if (daysLeft <= 1) {
+            smartAlerts.push({ row: r, reason: `Runs out today/tomorrow (${Math.round(daysLeft * 10) / 10}d left)`, urgency: "high" });
+          } else if (daysLeft <= 3) {
+            smartAlerts.push({ row: r, reason: `${Math.round(daysLeft)}d of supply left`, urgency: "medium" });
+          }
+          continue;
+        }
+
+        // 2. Expiring soon — more important than low stock
+        if (r.best_before_date) {
+          const days = daysUntil(r.best_before_date);
+          if (days < 0) {
+            smartAlerts.push({ row: r, reason: `Expired ${Math.abs(days)}d ago`, urgency: "high" });
+            continue;
+          }
+          if (days <= 2) {
+            smartAlerts.push({ row: r, reason: days === 0 ? "Expires today" : `Expires in ${days}d`, urgency: "high" });
+            continue;
+          }
+        }
+
+        // 3. No consumption data — only alert if significantly below min
+        if (r.quantity < r.min_quantity) {
+          smartAlerts.push({ row: r, reason: `Only ${r.quantity} ${r.unit} left (min: ${r.min_quantity})`, urgency: "medium" });
+        } else if (r.quantity === r.min_quantity && r.min_quantity > 1) {
+          // Only alert at min if min is meaningful (>1)
+          smartAlerts.push({ row: r, reason: `At minimum (${r.quantity} ${r.unit})`, urgency: "low" });
+        }
+      }
+
+      if (smartAlerts.length > 0) {
+        const high = smartAlerts.filter((a) => a.urgency === "high");
+        const med = smartAlerts.filter((a) => a.urgency === "medium");
+
+        if (high.length > 0) {
+          addNotification({
+            type: "error",
+            title: "Urgent: Stock Running Out",
+            message: high.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (high.length > 3 ? ` +${high.length - 3} more` : ""),
+            duration: 10000,
+          });
+        }
+        if (med.length > 0) {
+          addNotification({
+            type: "warning",
+            title: "Stock Getting Low",
+            message: med.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (med.length > 3 ? ` +${med.length - 3} more` : ""),
+            duration: 8000,
+          });
+        }
       }
 
       const expiringItems = mapped.filter((r) => r.best_before_date && daysUntil(r.best_before_date) <= 3 && daysUntil(r.best_before_date) >= 0);
@@ -134,12 +184,17 @@ export function Dashboard() {
     fetchRecentTransactions();
   }, []);
 
-  const lowRows = rows.filter(
-    (r) =>
-      r.quantity <= r.min_quantity ||
-      (r.avg_daily_consumption && r.avg_daily_consumption > 0 && r.quantity / r.avg_daily_consumption <= 3) ||
-      (r.best_before_date && daysUntil(r.best_before_date) <= 3)
-  );
+  const lowRows = rows.filter((r) => {
+    if (r.avg_daily_consumption && r.avg_daily_consumption > 0) {
+      return r.quantity / r.avg_daily_consumption <= 3;
+    }
+    if (r.best_before_date) {
+      const days = daysUntil(r.best_before_date);
+      if (days <= 3) return true;
+    }
+    if (r.quantity < r.min_quantity) return true;
+    return false;
+  });
 
   function startEdit(row: StockRow) {
     setErrorMsg(null);
