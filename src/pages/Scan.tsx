@@ -110,27 +110,6 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
     const reader = new FileReader();
     reader.onload = () => setImageUrl(reader.result as string);
     reader.readAsDataURL(file);
-    // Also send to AI for identification
-    identifyFromFile(file);
-  }
-
-  async function identifyFromFile(file: File) {
-    setStage("identifying");
-    setAiSuggestion(null);
-    try {
-      const res = await identifyProductFromPhoto(file);
-      setName(res.name ?? "");
-      setCategory(res.category ?? "");
-      setImageUrl(res.image_url ?? null);
-      setUnit(res.likely_unit ?? "pcs");
-      setStage("form");
-    } catch (err) {
-      const { title, detail } = friendlyAIError(err);
-      addNotification({ type: "error", title, message: detail });
-      setErrorMsg(detail);
-      setAiSuggestion(detail);
-      setStage("form");
-    }
   }
 
   async function saveItem() {

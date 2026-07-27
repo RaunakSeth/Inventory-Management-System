@@ -10,27 +10,24 @@ interface Props {
   onDone: () => void;
 }
 
-/**
- * Flow: barcode -> Open Food Facts lookup.
- *   found      -> pre-filled confirm form, "add stock" posts a restock transaction.
- *   not found  -> offers a photo capture, sent to Gemini vision to identify the
- *                 product instead. Either path ends by upserting product_library
- *                 (keyed on barcode) so the next scan is instant.
- */
 export function ProductQuickAdd({ barcode, onDone }: Props) {
   const webcamRef = useRef<Webcam>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<"looking_up" | "confirm" | "needs_photo" | "saving">(
     "looking_up"
   );
   const [result, setResult] = useState<ProductLookupResult | null>(null);
   const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [brand, setBrand] = useState("");
   const [unit, setUnit] = useState("pcs");
   const [quantity, setQuantity] = useState(1);
   const [minQuantity, setMinQuantity] = useState(1);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [bestBeforeDate, setBestBeforeDate] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { addNotification } = useNotifications();
 
-  // Kick off the lookup once on mount.
   useEffect(() => {
     lookupProductByBarcode(barcode)
       .then((res) => {
@@ -38,13 +35,15 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
         if (res.found) {
           setName(res.name ?? "");
           setUnit(res.likely_unit ?? "pcs");
+          setImageUrl(res.image_url ?? null);
+          setCategory(res.category ?? "");
+          setBrand(res.brand ?? "");
           setStage("confirm");
         } else {
           setStage("needs_photo");
         }
       })
       .catch((err) => setErrorMsg(err?.message ?? String(err)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barcode]);
 
   async function identifyFromCamera() {
@@ -56,7 +55,10 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
       const res = await identifyProductFromPhoto(blob);
       setResult(res);
       setName(res.name ?? "");
+      setCategory(res.category ?? "");
+      setBrand(res.brand ?? "");
       setUnit(res.likely_unit ?? "pcs");
+      setImageUrl(res.image_url ?? null);
       setStage("confirm");
     } catch (err) {
       const { title, detail } = friendlyAIError(err);
@@ -66,7 +68,16 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
     }
   }
 
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImageUrl(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
   async function saveAndRestock() {
+    if (!name.trim()) { setErrorMsg("Product name is required."); return; }
     setStage("saving");
     setErrorMsg(null);
     try {
@@ -75,11 +86,11 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
         .upsert(
           {
             barcode,
-            name,
-            brand: result?.brand ?? null,
-            category: result?.category ?? null,
+            name: name.trim(),
+            brand: brand || null,
+            category: category || null,
             default_unit: unit,
-            image_url: result?.image_url ?? null,
+            image_url: imageUrl,
             source: result?.source ?? "manual",
           },
           { onConflict: "barcode" }
@@ -98,7 +109,12 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
       if (!stockItemId) {
         const { data: newStock, error: stockErr } = await supabase
           .from("stock_items")
-          .insert({ product_id: product.id, unit, min_quantity: minQuantity })
+          .insert({
+            product_id: product.id,
+            unit,
+            min_quantity: minQuantity,
+            best_before_date: bestBeforeDate || null,
+          })
           .select()
           .single();
         if (stockErr) throw stockErr;
@@ -128,7 +144,7 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
       {stage === "needs_photo" && (
         <div className="space-y-2">
           <p className="text-sm text-amber-400">
-            Not found in Open Food Facts. Snap a photo and I'll identify it.
+            Not found in Open Food Facts. Snap a photo or upload one, or enter details manually.
           </p>
           <div className="rounded-lg overflow-hidden bg-black">
             <Webcam
@@ -138,9 +154,16 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
               className="w-full"
             />
           </div>
-          <button onClick={identifyFromCamera} className="w-full py-2 rounded-lg bg-emerald-500">
-            Identify from photo
-          </button>
+          <div className="flex gap-2">
+            <button onClick={identifyFromCamera} className="flex-1 py-2 rounded-lg bg-emerald-500 text-sm">
+              Snap & identify
+            </button>
+            <button onClick={() => fileRef.current?.click()} className="py-2 px-3 rounded-lg bg-slate-800 text-sm">
+              Upload
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+          </div>
+          {imageUrl && <img src={imageUrl} alt="Preview" className="w-16 h-16 rounded object-cover" />}
           <button
             onClick={() => setStage("confirm")}
             className="w-full py-2 rounded-lg bg-slate-800 text-sm"
@@ -153,13 +176,33 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
       {(stage === "confirm" || stage === "saving") && (
         <div className="space-y-2">
           <label className="block text-sm">
-            Name
+            Name *
             <input
               className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="Product name"
             />
           </label>
+          <div className="flex gap-2">
+            <label className="flex-1 text-sm">
+              Category
+              <input
+                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="Grains, Dairy..."
+              />
+            </label>
+            <label className="flex-1 text-sm">
+              Brand
+              <input
+                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+              />
+            </label>
+          </div>
           <div className="flex gap-2">
             <label className="flex-1 text-sm">
               Unit
@@ -188,9 +231,19 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
               />
             </label>
           </div>
+          <label className="block text-sm">
+            Best before (optional)
+            <input
+              type="date"
+              className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+              value={bestBeforeDate}
+              onChange={(e) => setBestBeforeDate(e.target.value)}
+            />
+          </label>
+          {imageUrl && <img src={imageUrl} alt="Preview" className="w-16 h-16 rounded object-cover" />}
           <button
             onClick={saveAndRestock}
-            disabled={stage === "saving" || !name}
+            disabled={stage === "saving" || !name.trim()}
             className="w-full py-2 rounded-lg bg-emerald-500 disabled:opacity-50"
           >
             {stage === "saving" ? "Saving…" : "Save & add to stock"}
