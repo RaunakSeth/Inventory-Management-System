@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { ShoppingCart, Plus, Trash2, Check, AlertCircle, Package, ArrowRight } from "lucide-react";
-import type { ShoppingListItem, Product } from "../lib/types";
+import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Section } from "@astryxdesign/core/Section";
+import { ShoppingCart, Plus, Trash2, Check, ArrowRight } from "lucide-react";
+import type { ShoppingListItem, Product, QuantityUnit } from "../lib/types";
 
 const FALLBACK_IMG =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2364758b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z'%3E%3C/path%3E%3Cline x1='3' y1='6' x2='21' y2='6'%3E%3C/line%3E%3Cpath d='M16 10a4 4 0 01-8 0'%3E%3C/path%3E%3C/svg%3E";
@@ -18,6 +25,7 @@ export function ShoppingList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [addingToStock, setAddingToStock] = useState(false);
+  const [units, setUnits] = useState<QuantityUnit[]>([]);
 
   async function fetchItems() {
     setLoading(true);
@@ -35,9 +43,15 @@ export function ShoppingList() {
     if (data) setProducts(data as Product[]);
   }
 
+  async function fetchUnits() {
+    const { data } = await supabase.from("quantity_units").select("*").order("name");
+    if (data) setUnits(data as QuantityUnit[]);
+  }
+
   useEffect(() => {
     fetchItems();
     fetchProducts();
+    fetchUnits();
   }, []);
 
   async function addItem() {
@@ -154,25 +168,17 @@ export function ShoppingList() {
           </span>
         )}
         <div className="ml-auto flex gap-2">
-          <button onClick={addLowStockToShopping} className="text-xs bg-slate-800 px-3 py-1.5 rounded-lg hover:bg-slate-700 transition">
-            + Low stock
-          </button>
-          <button onClick={() => setShowForm(!showForm)} className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">
-            <Plus className="w-4 h-4 text-white" />
-          </button>
+          <Button label="+ Low stock" size="sm" variant="secondary" onClick={addLowStockToShopping} />
+          <IconButton icon={<Plus className="w-4 h-4" />} label="Add item" size="sm" onClick={() => setShowForm(!showForm)} />
         </div>
       </div>
 
       {errorMsg && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
-        </div>
+        <Banner status="error" title={errorMsg} isDismissable onDismiss={() => setErrorMsg(null)} />
       )}
 
       {showForm && (
-        <div className="rounded-xl bg-slate-900 p-4 space-y-3 border border-slate-800">
+        <Section variant="muted" padding={4}>
           <label className="block text-sm">
             Product
             <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1">
@@ -183,30 +189,25 @@ export function ShoppingList() {
             </select>
           </label>
           {!selectedProduct && (
-            <label className="block text-sm">
-              Or type a name
-              <input value={newItemName} onChange={(e) => setNewItemName(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1" placeholder="e.g. Eggs" />
-            </label>
+            <TextInput label="Or type a name" value={newItemName} onChange={setNewItemName} placeholder="e.g. Eggs" />
           )}
           <div className="flex gap-2">
-            <label className="flex-1 text-sm">
-              Qty
-              <input type="number" value={newItemQty} onChange={(e) => setNewItemQty(Number(e.target.value))} className="w-full mt-1 rounded bg-slate-800 px-2 py-1" />
-            </label>
+            <NumberInput label="Qty" value={newItemQty} onChange={(val) => setNewItemQty(val ?? 1)} min={1} />
             <label className="flex-1 text-sm">
               Unit
-              <input value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1" />
+              <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1">
+                {units.length > 0
+                  ? units.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)
+                  : <option value="pcs">pcs</option>}
+              </select>
             </label>
           </div>
-          <label className="block text-sm">
-            Note
-            <input value={newItemNote} onChange={(e) => setNewItemNote(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1" placeholder="Optional" />
-          </label>
+          <TextInput label="Note" value={newItemNote} onChange={setNewItemNote} placeholder="Optional" />
           <div className="flex gap-2">
-            <button onClick={addItem} className="flex-1 py-2 rounded-lg bg-emerald-500 text-sm">Add</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-slate-800 text-sm">Cancel</button>
+            <Button label="Add" variant="primary" onClick={addItem} width="100%" />
+            <Button label="Cancel" variant="secondary" onClick={() => setShowForm(false)} />
           </div>
-        </div>
+        </Section>
       )}
 
       {loading ? (
@@ -214,11 +215,11 @@ export function ShoppingList() {
           {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-slate-800/50 animate-pulse rounded-xl" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Shopping list is empty.</p>
-          <p className="text-xs mt-1">Add items manually or tap "+ Low stock" to auto-fill.</p>
-        </div>
+        <EmptyState
+          title="Shopping list is empty"
+          description="Add items manually or tap '+ Low stock' to auto-fill."
+          icon={<ShoppingCart />}
+        />
       ) : (
         <>
           {pending.length > 0 && (
@@ -230,9 +231,14 @@ export function ShoppingList() {
           )}
 
           {pending.length > 0 && done.length > 0 && (
-            <button onClick={addAllToStock} disabled={addingToStock} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 font-medium text-sm disabled:opacity-50">
-              {addingToStock ? "Adding..." : <>Add all to stock <ArrowRight className="w-4 h-4" /></>}
-            </button>
+            <Button
+              label={addingToStock ? "Adding..." : "Add all to stock"}
+              icon={!addingToStock ? <ArrowRight className="w-4 h-4" /> : undefined}
+              variant="primary"
+              onClick={addAllToStock}
+              isDisabled={addingToStock}
+              width="100%"
+            />
           )}
 
           {done.length > 0 && (
@@ -246,9 +252,7 @@ export function ShoppingList() {
                   <ShoppingItemCard key={item.id} item={item} onToggle={() => toggleDone(item.id, item.done)} onRemove={() => removeItem(item.id)} />
                 ))}
               </div>
-              <button onClick={clearDone} className="mt-2 text-xs text-slate-500 hover:text-red-400 transition">
-                Clear completed
-              </button>
+              <Button label="Clear completed" variant="secondary" size="sm" onClick={clearDone} className="mt-2" />
             </details>
           )}
         </>
@@ -280,9 +284,7 @@ function ShoppingItemCard({ item, onToggle, onRemove }: { item: any; onToggle: (
       <span className="text-xs text-slate-500 shrink-0">
         {item.quantity} {item.unit}
       </span>
-      <button onClick={onRemove} className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-red-900/50 shrink-0">
-        <Trash2 className="w-3 h-3 text-slate-500 hover:text-red-400" />
-      </button>
+      <IconButton icon={<Trash2 className="w-3 h-3" />} label="Remove item" size="sm" onClick={onRemove} />
     </div>
   );
 }

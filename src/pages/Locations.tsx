@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
-import { MapPin, Plus, Trash2, Edit3, Check, X, AlertCircle, ChevronRight } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Section } from "@astryxdesign/core/Section";
+import { MapPin, Plus, Trash2, Edit3, Check, X } from "lucide-react";
 import type { Location } from "../lib/types";
 
 export function Locations() {
@@ -82,21 +88,14 @@ export function Locations() {
       </div>
 
       {errorMsg && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
-        </div>
+        <Banner status="error" title={errorMsg} isDismissable onDismiss={() => setErrorMsg(null)} />
       )}
 
       {showForm && (
-        <div className="rounded-xl bg-slate-900 p-4 space-y-3 border border-slate-800">
-          <p className="text-sm font-medium text-slate-300">New location</p>
-          <label className="block text-sm">
-            Name
-            <input value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1" placeholder="e.g. Kitchen store" />
-          </label>
-          <label className="block text-sm">
+        <Section variant="muted" padding={4}>
+          <p className="text-sm font-medium mb-3">New location</p>
+          <TextInput label="Name" value={newName} onChange={setNewName} placeholder="e.g. Kitchen store" />
+          <label className="block text-sm mt-2">
             Parent (optional)
             <select value={newParent} onChange={(e) => setNewParent(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1">
               <option value="">None (root level)</option>
@@ -105,13 +104,11 @@ export function Locations() {
               ))}
             </select>
           </label>
-          <div className="flex gap-2">
-            <button onClick={createLocation} disabled={saving || !newName.trim()} className="flex-1 py-2 rounded-lg bg-emerald-500 text-sm disabled:opacity-50">
-              {saving ? "Saving..." : "Create"}
-            </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-slate-800 text-sm">Cancel</button>
+          <div className="flex gap-2 mt-3">
+            <Button label={saving ? "Saving..." : "Create"} variant="primary" isLoading={saving} isDisabled={!newName.trim()} onClick={createLocation} />
+            <Button label="Cancel" variant="secondary" onClick={() => setShowForm(false)} />
           </div>
-        </div>
+        </Section>
       )}
 
       {loading ? (
@@ -119,10 +116,11 @@ export function Locations() {
           {[0, 1, 2].map((i) => <Skeleton key={i} height={56} radius={4} index={i} />)}
         </div>
       ) : locations.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <MapPin className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No locations yet. Create your first one!</p>
-        </div>
+        <EmptyState
+          title="No locations yet"
+          description="Create your first location to organize your inventory."
+          icon={<MapPin />}
+        />
       ) : (
         <div className="space-y-1">
           {rootLocations.map((loc) => (
@@ -174,16 +172,16 @@ function LocationItem({
         <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
         {isEditing ? (
           <div className="flex items-center gap-1 flex-1">
-            <input value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 rounded bg-slate-800 px-2 py-1 text-sm" autoFocus />
-            <button onClick={onSaveEdit} disabled={saving} className="w-7 h-7 rounded bg-emerald-500 flex items-center justify-center disabled:opacity-50"><Check className="w-3 h-3" /></button>
-            <button onClick={onCancelEdit} className="w-7 h-7 rounded bg-slate-800 flex items-center justify-center"><X className="w-3 h-3" /></button>
+            <TextInput label="" isLabelHidden value={editName} onChange={setEditName} size="sm" />
+            <IconButton icon={<Check className="w-3 h-3" />} label="Save" size="sm" onClick={onSaveEdit} />
+            <IconButton icon={<X className="w-3 h-3" />} label="Cancel" size="sm" onClick={onCancelEdit} />
           </div>
         ) : (
           <>
             <span className="text-sm flex-1">{location.name}</span>
             <div className="flex items-center gap-1">
-              <button onClick={onStartEdit} className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-slate-700"><Edit3 className="w-3 h-3 text-slate-400" /></button>
-              <button onClick={onDelete} className="w-7 h-7 rounded-full bg-slate-800/50 flex items-center justify-center hover:bg-red-900/50"><Trash2 className="w-3 h-3 text-slate-500" /></button>
+              <IconButton icon={<Edit3 className="w-3 h-3" />} label="Edit" size="sm" onClick={onStartEdit} />
+              <IconButton icon={<Trash2 className="w-3 h-3" />} label="Delete" size="sm" onClick={onDelete} />
             </div>
           </>
         )}

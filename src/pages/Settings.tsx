@@ -8,6 +8,8 @@ import { Switch } from "@astryxdesign/core/Switch";
 import { IconButton } from "@astryxdesign/core/IconButton";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Section } from "@astryxdesign/core/Section";
+import { List, ListItem } from "@astryxdesign/core/List";
 import { Selector, SelectorOption } from "@astryxdesign/core/Selector";
 import { Settings, Key, Bell, Save, ExternalLink, Check, Zap, Loader2, ChevronDown, Store as StoreIcon, Package, Tag, Plus, Trash2 } from "lucide-react";
 
@@ -555,8 +557,8 @@ export default function SettingsPage() {
       />
 
       {/* Notifications */}
-      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-4">
-        <div className="flex items-center gap-2 text-slate-300">
+      <Section variant="muted" padding={4}>
+        <div className="flex items-center gap-2 mb-3">
           <Bell className="w-4 h-4" />
           <h2 className="font-semibold">Notifications</h2>
         </div>
@@ -590,33 +592,36 @@ export default function SettingsPage() {
             max={30}
           />
         )}
-      </section>
+      </Section>
 
       {/* Stores */}
-      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-slate-300">
+      <Section variant="muted" padding={4}>
+        <div className="flex items-center gap-2 mb-3">
           <StoreIcon className="w-4 h-4" />
           <h2 className="font-semibold">Stores</h2>
         </div>
-        {stores.map((store) => (
-          <div key={store.id} className="flex items-center justify-between py-2 border-b border-slate-800 last:border-0">
-            <div>
-              <span className="text-sm text-slate-200">{store.name}</span>
-              {store.address && <span className="text-xs text-slate-500 ml-2">({store.address})</span>}
-            </div>
-            <IconButton icon={<Trash2 className="w-3.5 h-3.5" />} label={`Delete ${store.name}`} size="sm" onClick={() => deleteStore(store.id)} />
-          </div>
-        ))}
-        <div className="flex gap-2">
+        <List hasDividers>
+          {stores.map((store) => (
+            <ListItem
+              key={store.id}
+              label={store.name}
+              description={store.address || undefined}
+              endContent={
+                <IconButton icon={<Trash2 className="w-3.5 h-3.5" />} label={`Delete ${store.name}`} size="sm" onClick={() => deleteStore(store.id)} />
+              }
+            />
+          ))}
+        </List>
+        <div className="flex gap-2 mt-3">
           <TextInput label="" isLabelHidden value={newStoreName} onChange={setNewStoreName} placeholder="Store name" size="sm" />
           <TextInput label="" isLabelHidden value={newStoreAddress} onChange={setNewStoreAddress} placeholder="Address (optional)" size="sm" />
           <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newStoreName.trim()} onClick={addStore} />
         </div>
-      </section>
+      </Section>
 
       {/* Quantity Units */}
-      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-slate-300">
+      <Section variant="muted" padding={4}>
+        <div className="flex items-center gap-2 mb-3">
           <Package className="w-4 h-4" />
           <h2 className="font-semibold">Quantity Units</h2>
         </div>
@@ -628,32 +633,35 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 mt-3">
           <TextInput label="" isLabelHidden value={newUnitName} onChange={setNewUnitName} placeholder="Unit (e.g. kg)" size="sm" />
           <TextInput label="" isLabelHidden value={newUnitPlural} onChange={setNewUnitPlural} placeholder="Plural (optional)" size="sm" />
           <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newUnitName.trim()} onClick={addUnit} />
         </div>
-      </section>
+      </Section>
 
       {/* Product Groups */}
-      <section className="rounded-xl bg-slate-900 border border-slate-800 p-4 space-y-3">
-        <div className="flex items-center gap-2 text-slate-300">
+      <Section variant="muted" padding={4}>
+        <div className="flex items-center gap-2 mb-3">
           <Tag className="w-4 h-4" />
           <h2 className="font-semibold">Product Groups</h2>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <List hasDividers>
           {groups.map((group) => (
-            <div key={group.id} className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2.5 py-1.5 text-sm text-slate-300">
-              <span>{group.name}</span>
-              <IconButton icon={<Trash2 className="w-3 h-3" />} label={`Delete ${group.name}`} size="sm" onClick={() => deleteGroup(group.id)} />
-            </div>
+            <ListItem
+              key={group.id}
+              label={group.name}
+              endContent={
+                <IconButton icon={<Trash2 className="w-3 h-3" />} label={`Delete ${group.name}`} size="sm" onClick={() => deleteGroup(group.id)} />
+              }
+            />
           ))}
-        </div>
-        <div className="flex gap-2">
+        </List>
+        <div className="flex gap-2 mt-3">
           <TextInput label="" isLabelHidden value={newGroupName} onChange={setNewGroupName} placeholder="Group name" size="sm" />
           <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newGroupName.trim()} onClick={addGroup} />
         </div>
-      </section>
+      </Section>
     </div>
   );
 }

@@ -63,7 +63,7 @@ export function AppSidebar({ open, onClose, showFieldVisibility = false }: AppSi
       >
         <SideNav
           header={
-            <SideNavHeading heading="PG Inventory" icon={<Package className="w-5 h-5" />} />
+            <SideNavHeading heading="Inventory Management" icon={<Package className="w-5 h-5" />} />
           }
         >
           <SideNavSection title="Navigation" isHeaderHidden>

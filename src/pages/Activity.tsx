@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import { History, Package, Filter, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react";
+import { Button } from "@astryxdesign/core/Button";
+import { IconButton } from "@astryxdesign/core/IconButton";
+import { EmptyState } from "@astryxdesign/core/EmptyState";
+import { Banner } from "@astryxdesign/core/Banner";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { Thumbnail } from "@astryxdesign/core/Thumbnail";
+import { History, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Txn {
   id: string;
@@ -66,11 +72,7 @@ export function Activity() {
       </div>
 
       {errorMsg && (
-        <div className="flex items-start gap-2 rounded-xl bg-red-900/20 border border-red-800/30 p-3 text-sm text-red-400">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="ml-auto text-red-500 hover:text-red-300">x</button>
-        </div>
+        <Banner status="error" title={errorMsg} isDismissable onDismiss={() => setErrorMsg(null)} />
       )}
 
       <div className="flex items-center gap-2">
@@ -91,14 +93,15 @@ export function Activity() {
       {loading ? (
         <div className="space-y-2">
           {[1,2,3,4,5].map((i) => (
-            <div key={i} className="h-16 bg-slate-800/50 animate-pulse rounded-xl" />
+            <Skeleton key={i} height={64} radius={4} index={i} />
           ))}
         </div>
       ) : txns.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <History className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No transactions yet.</p>
-        </div>
+        <EmptyState
+          title="No transactions yet"
+          description="Start by scanning a barcode or adding items manually."
+          icon={<History />}
+        />
       ) : (
         <div className="space-y-1">
           {txns.map((t) => {
@@ -106,13 +109,12 @@ export function Activity() {
             const isAdd = t.quantity_change > 0;
             return (
               <div key={t.id} className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2.5 border border-slate-800/30">
-                <div className="w-10 h-10 rounded-lg bg-slate-800 overflow-hidden shrink-0 flex items-center justify-center">
-                  {p?.image_url ? (
-                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <img src={FALLBACK_IMG} alt="" className="w-5 h-5 opacity-50" />
-                  )}
-                </div>
+                <Thumbnail
+                  src={p?.image_url || FALLBACK_IMG}
+                  alt={p?.name ?? ""}
+                  label={p?.name ?? ""}
+                  className="w-10 h-10"
+                />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium truncate">{p?.name ?? "(unknown)"}</p>
@@ -136,21 +138,21 @@ export function Activity() {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3">
-          <button
+          <IconButton
+            icon={<ChevronLeft className="w-4 h-4" />}
+            label="Previous page"
+            size="sm"
+            isDisabled={page === 0}
             onClick={() => setPage(Math.max(0, page - 1))}
-            disabled={page === 0}
-            className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center disabled:opacity-30"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+          />
           <span className="text-xs text-slate-500">Page {page + 1} / {totalPages}</span>
-          <button
+          <IconButton
+            icon={<ChevronRight className="w-4 h-4" />}
+            label="Next page"
+            size="sm"
+            isDisabled={page >= totalPages - 1}
             onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-            disabled={page >= totalPages - 1}
-            className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center disabled:opacity-30"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          />
         </div>
       )}
     </div>

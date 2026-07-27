@@ -13,6 +13,10 @@ import { Spinner } from "@astryxdesign/core/Spinner";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Thumbnail } from "@astryxdesign/core/Thumbnail";
 import { Banner } from "@astryxdesign/core/Banner";
+import { Section } from "@astryxdesign/core/Section";
+import { List } from "@astryxdesign/core/List";
+import { ListItem } from "@astryxdesign/core/List";
+import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
 import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar, Store, DollarSign, Tag } from "lucide-react";
 import type { Location, ProductGroup } from "../lib/types";
@@ -419,12 +423,10 @@ export function Dashboard() {
             </div>
           )}
 
-          <details className="group">
-            <summary className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer hover:text-slate-300 transition py-2">
-              <Package className="w-4 h-4" />
-              All Stock ({filteredRows.length})
-              <Plus className="w-3 h-3 ml-auto group-open:rotate-45 transition" />
-            </summary>
+          <Collapsible
+            trigger={<span className="flex items-center gap-2 text-sm"><Package className="w-4 h-4" /> All Stock ({filteredRows.length})</span>}
+            defaultIsOpen={false}
+          >
             <div className="space-y-2 mt-2">
               {filteredRows.map((row) => (
                 <StockCard
@@ -454,42 +456,38 @@ export function Dashboard() {
                 />
               ))}
             </div>
-          </details>
+          </Collapsible>
 
           {recentTransactions.length > 0 && (
-            <details className="group" open>
-              <summary className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer hover:text-slate-300 transition py-2">
-                <History className="w-4 h-4" />
-                Recent Activity
-              </summary>
-              <div className="space-y-1 mt-2">
+            <Section variant="muted" padding={3}>
+              <List hasDividers>
                 {recentTransactions.map((t: any) => {
                   const p = t.stock_items?.product_library;
                   const icon = t.type === "restock" || t.quantity_change > 0 ? "text-emerald-400" : "text-red-400";
                   const label = t.quantity_change > 0 ? "+" : "";
                   return (
-                    <div key={t.id} className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2 border border-slate-800/30">
-                      <Thumbnail
-                        src={p?.image_url || FALLBACK_IMG}
-                        alt={p?.name ?? ""}
-                        label={p?.name ?? ""}
-                        className="w-8 h-8"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm truncate">{p?.name ?? "(unknown)"}</p>
-                        <p className="text-[10px] text-slate-600 truncate">
-                          {t.note || t.type}
-                          {t.stores?.name ? ` · ${t.stores.name}` : ""}
-                        </p>
-                      </div>
-                      <p className={"text-sm font-mono " + icon}>
-                        {label}{t.quantity_change}
-                      </p>
-                    </div>
+                    <ListItem
+                      key={t.id}
+                      label={p?.name ?? "(unknown)"}
+                      description={`${t.note || t.type}${t.stores?.name ? ` · ${t.stores.name}` : ""}`}
+                      startContent={
+                        <Thumbnail
+                          src={p?.image_url || FALLBACK_IMG}
+                          alt={p?.name ?? ""}
+                          label={p?.name ?? ""}
+                          className="w-8 h-8"
+                        />
+                      }
+                      endContent={
+                        <span className={"text-sm font-mono " + icon}>
+                          {label}{t.quantity_change}
+                        </span>
+                      }
+                    />
                   );
                 })}
-              </div>
-            </details>
+              </List>
+            </Section>
           )}
         </>
       )}
