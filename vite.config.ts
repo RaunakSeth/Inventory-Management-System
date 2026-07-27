@@ -3,6 +3,17 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import fs from "fs";
 
+const httpsConfig = (() => {
+  try {
+    return {
+      key: fs.readFileSync("./key.pem"),
+      cert: fs.readFileSync("./cert.pem"),
+    };
+  } catch {
+    return undefined;
+  }
+})();
+
 export default defineConfig({
   plugins: [
     react(),
@@ -29,9 +40,6 @@ export default defineConfig({
   ],
   server: {
     host: true,
-    https: {
-      key: fs.readFileSync("./key.pem"),
-      cert: fs.readFileSync("./cert.pem"),
-    },
+    ...(httpsConfig ? { https: httpsConfig } : {}),
   },
 });
