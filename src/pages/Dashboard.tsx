@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useNotifications } from "../components/Notifications";
+import { useConfirm } from "../components/ConfirmDialog";
 import { useSettings, type FieldId } from "../lib/settings";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar } from "lucide-react";
 import type { Location } from "../lib/types";
 
@@ -36,6 +38,7 @@ function daysUntil(dateStr: string): number {
 
 export function Dashboard() {
   const { addNotification } = useNotifications();
+  const { showConfirm } = useConfirm();
   const { settings } = useSettings();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +46,6 @@ export function Dashboard() {
   const [editQty, setEditQty] = useState<number>(0);
   const [editUnit, setEditUnit] = useState<string>("pcs");
   const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [allLocations, setAllLocations] = useState<Location[]>([]);
@@ -272,7 +274,6 @@ export function Dashboard() {
     if (error) {
       setErrorMsg(error.message);
     } else {
-      setConfirmDelete(null);
       fetchStock();
     }
   }
@@ -308,8 +309,8 @@ export function Dashboard() {
 
       {loading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 bg-slate-800/50 animate-pulse rounded-xl" />
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={96} radius={4} index={i} />
           ))}
         </div>
       ) : rows.length === 0 ? (
@@ -336,11 +337,13 @@ export function Dashboard() {
                   onCancelEdit={cancelEdit}
                   onSaveEdit={() => saveEdit(row)}
                   onQuickAdjust={(d) => quickAdjust(row, d)}
-                  onDelete={() => setConfirmDelete(row.stock_item_id)}
+                  onDelete={() => showConfirm({
+                    title: `Delete "${row.product_name}"?`,
+                    description: "This will permanently remove the stock entry. Transactions are preserved.",
+                    actionLabel: "Delete",
+                    onAction: () => deleteStockItem(row.stock_item_id),
+                  })}
                   saving={saving}
-                  confirmDelete={confirmDelete}
-                  onConfirmDelete={() => deleteStockItem(row.stock_item_id)}
-                  onCancelDelete={() => setConfirmDelete(null)}
                   locations={allLocations}
                   onAssignLocation={(locId) => assignLocation(row.stock_item_id, locId)}
                   activatingLocation={activatingLocation}
@@ -371,11 +374,13 @@ export function Dashboard() {
                   onCancelEdit={cancelEdit}
                   onSaveEdit={() => saveEdit(row)}
                   onQuickAdjust={(d) => quickAdjust(row, d)}
-                  onDelete={() => setConfirmDelete(row.stock_item_id)}
+                  onDelete={() => showConfirm({
+                    title: `Delete "${row.product_name}"?`,
+                    description: "This will permanently remove the stock entry. Transactions are preserved.",
+                    actionLabel: "Delete",
+                    onAction: () => deleteStockItem(row.stock_item_id),
+                  })}
                   saving={saving}
-                  confirmDelete={confirmDelete}
-                  onConfirmDelete={() => deleteStockItem(row.stock_item_id)}
-                  onCancelDelete={() => setConfirmDelete(null)}
                   locations={allLocations}
                   onAssignLocation={(locId) => assignLocation(row.stock_item_id, locId)}
                   activatingLocation={activatingLocation}
@@ -438,9 +443,6 @@ function StockCard({
   onQuickAdjust,
   onDelete,
   saving,
-  confirmDelete,
-  onConfirmDelete,
-  onCancelDelete,
   locations,
   onAssignLocation,
   activatingLocation,
@@ -459,37 +461,14 @@ function StockCard({
   onQuickAdjust: (d: number) => void;
   onDelete: () => void;
   saving: boolean;
-  confirmDelete: string | null;
-  onConfirmDelete: () => void;
-  onCancelDelete: () => void;
   locations: Location[];
   onAssignLocation: (locationId: string | null) => void;
   activatingLocation: string | null;
   visibleFields: FieldId[];
 }) {
   const isEditing = editingId === row.stock_item_id;
-  const isDeleting = confirmDelete === row.stock_item_id;
   const isUrgent = row.estimated_days_remaining !== null && row.estimated_days_remaining <= 2;
   const isWarning = row.estimated_days_remaining !== null && row.estimated_days_remaining > 2;
-
-  if (isDeleting) {
-    return (
-      <div className="rounded-xl bg-red-900/20 border border-red-800/30 p-4">
-        <p className="text-sm font-medium text-red-400">Delete "{row.product_name}"?</p>
-        <p className="text-xs text-red-400/70 mt-1">
-          This will permanently remove the stock entry. Transactions are preserved.
-        </p>
-        <div className="flex gap-2 mt-3">
-          <button onClick={onConfirmDelete} className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-medium hover:bg-red-400 transition">
-            Delete
-          </button>
-          <button onClick={onCancelDelete} className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:bg-slate-700 transition">
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div

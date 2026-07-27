@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { useConfirm } from "../components/ConfirmDialog";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { MapPin, Plus, Trash2, Edit3, Check, X, AlertCircle, ChevronRight } from "lucide-react";
 import type { Location } from "../lib/types";
 
 export function Locations() {
+  const { showConfirm } = useConfirm();
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -12,7 +15,6 @@ export function Locations() {
   const [newParent, setNewParent] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function fetchLocations() {
@@ -61,7 +63,6 @@ export function Locations() {
         setErrorMsg(error.message);
       }
     } else {
-      setConfirmDelete(null);
       fetchLocations();
     }
   }
@@ -115,7 +116,7 @@ export function Locations() {
 
       {loading ? (
         <div className="space-y-2">
-          {[1,2,3].map((i) => <div key={i} className="h-14 bg-slate-800/50 animate-pulse rounded-xl" />)}
+          {[0, 1, 2].map((i) => <Skeleton key={i} height={56} radius={4} index={i} />)}
         </div>
       ) : locations.length === 0 ? (
         <div className="text-center py-16 text-slate-500">
@@ -135,10 +136,12 @@ export function Locations() {
               onStartEdit={() => { setEditingId(loc.id); setEditName(loc.name); }}
               onSaveEdit={() => updateLocation(loc.id)}
               onCancelEdit={() => setEditingId(null)}
-              onDelete={() => setConfirmDelete(loc.id)}
-              confirmDelete={confirmDelete}
-              onConfirmDelete={() => deleteLocation(loc.id)}
-              onCancelDelete={() => setConfirmDelete(null)}
+              onDelete={() => showConfirm({
+                title: `Delete "${loc.name}"?`,
+                description: "Items in this location will lose their location reference.",
+                actionLabel: "Delete",
+                onAction: () => deleteLocation(loc.id),
+              })}
               saving={saving}
             />
           ))}
@@ -150,8 +153,7 @@ export function Locations() {
 
 function LocationItem({
   location, children, editingId, editName, setEditName,
-  onStartEdit, onSaveEdit, onCancelEdit, onDelete,
-  confirmDelete, onConfirmDelete, onCancelDelete, saving,
+  onStartEdit, onSaveEdit, onCancelEdit, onDelete, saving,
 }: {
   location: Location;
   children: Location[];
@@ -162,26 +164,9 @@ function LocationItem({
   onSaveEdit: () => void;
   onCancelEdit: () => void;
   onDelete: () => void;
-  confirmDelete: string | null;
-  onConfirmDelete: () => void;
-  onCancelDelete: () => void;
   saving: boolean;
 }) {
   const isEditing = editingId === location.id;
-  const isDeleting = confirmDelete === location.id;
-
-  if (isDeleting) {
-    return (
-      <div className="rounded-xl bg-red-900/20 border border-red-800/30 p-3">
-        <p className="text-sm text-red-400">Delete "{location.name}"?</p>
-        <p className="text-xs text-red-400/70 mt-1">Items in this location will lose their location reference.</p>
-        <div className="flex gap-2 mt-2">
-          <button onClick={onConfirmDelete} className="px-3 py-1 rounded-lg bg-red-500 text-xs text-white">Delete</button>
-          <button onClick={onCancelDelete} className="px-3 py-1 rounded-lg bg-slate-800 text-xs">Cancel</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -217,9 +202,6 @@ function LocationItem({
               onSaveEdit={onSaveEdit}
               onCancelEdit={onCancelEdit}
               onDelete={onDelete}
-              confirmDelete={confirmDelete}
-              onConfirmDelete={onConfirmDelete}
-              onCancelDelete={onCancelDelete}
               saving={saving}
             />
           ))}

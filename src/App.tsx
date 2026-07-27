@@ -2,6 +2,7 @@ import { useState } from "react";
 import { HashRouter, Link, Route, Routes, useLocation } from "react-router-dom";
 import { SettingsProvider } from "./lib/settings";
 import { NotificationsProvider } from "./components/Notifications";
+import { ConfirmProvider } from "./components/ConfirmDialog";
 import { AppSidebar } from "./components/AppSidebar";
 import { Dashboard } from "./pages/Dashboard";
 import { Products } from "./pages/Products";
@@ -47,9 +48,11 @@ export default function App() {
   return (
     <SettingsProvider>
       <NotificationsProvider>
-        <HashRouter>
-          <AppShell />
-        </HashRouter>
+        <ConfirmProvider>
+          <HashRouter>
+            <AppShell />
+          </HashRouter>
+        </ConfirmProvider>
       </NotificationsProvider>
     </SettingsProvider>
   );

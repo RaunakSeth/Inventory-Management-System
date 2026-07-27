@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { useConfirm } from "../components/ConfirmDialog";
+import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Package, Search, Barcode, Trash2, AlertCircle, Tag, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Product {
@@ -26,11 +28,11 @@ const LABEL_COLORS = [
 ];
 
 export function Products() {
+  const { showConfirm } = useConfirm();
   const [products, setProducts] = useState<Product[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [tags, setTags] = useState<TagRecord[]>([]);
   const [editingTags, setEditingTags] = useState<string | null>(null);
   const [newTagInput, setNewTagInput] = useState("");
@@ -73,7 +75,6 @@ export function Products() {
         setErrorMsg(error.message);
       }
     } else {
-      setConfirmDelete(null);
       fetchProducts();
     }
   }
@@ -117,8 +118,8 @@ export function Products() {
 
       {loading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-slate-800/50 animate-pulse rounded-xl" />
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={80} radius={4} index={i} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
@@ -130,36 +131,21 @@ export function Products() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((p) => {
-            if (confirmDelete === p.id) {
-              return (
-                <div key={p.id} className="rounded-xl bg-red-900/20 border border-red-800/30 p-4">
-                  <p className="text-sm font-medium text-red-400">Delete "{p.name}"?</p>
-                  <p className="text-xs text-red-400/70 mt-1">
-                    This also removes the product from your library. Stock entries for this product are also deleted.
-                  </p>
-                  <div className="flex gap-2 mt-3">
-                    <button onClick={() => deleteProduct(p.id)} className="px-3 py-1.5 rounded-lg bg-red-500 text-white text-xs font-medium hover:bg-red-400 transition">
-                      Delete
-                    </button>
-                    <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-300 hover:bg-slate-700 transition">
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              );
-            }
-            return (
+          {filtered.map((p) => (
               <ProductCard
                 key={p.id}
                 product={p}
                 tags={tags}
                 onTagsChanged={fetchTags}
                 onUpdated={fetchProducts}
-                onDeleteClick={() => setConfirmDelete(p.id)}
+                onDeleteClick={() => showConfirm({
+                  title: `Delete "${p.name}"?`,
+                  description: "This also removes the product from your library. Stock entries for this product are also deleted.",
+                  actionLabel: "Delete",
+                  onAction: () => deleteProduct(p.id),
+                })}
               />
-            );
-          })}
+          ))}
         </div>
       )}
     </div>
