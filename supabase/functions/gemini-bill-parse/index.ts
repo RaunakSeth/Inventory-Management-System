@@ -8,8 +8,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
 };
 
-const SERVER_GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-
 const GROQ_MODEL_MAP: Record<string, string> = {
   "llama-3.2-11b-vision-preview": "qwen/qwen3.6-27b",
   "llama-3.2-90b-vision-preview": "qwen/qwen3.6-27b",
@@ -39,9 +37,9 @@ serve(async (req) => {
     }
 
     const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
-    let aiApiKey = SERVER_GEMINI_KEY;
+    let aiApiKey = "";
     let aiBaseUrl = "";
-    let aiModel = GEMINI_VISION_CHAIN[0];
+    let aiModel = "";
 
     if (jwt) {
       const supabase = createClient(
@@ -56,9 +54,9 @@ serve(async (req) => {
           .eq("user_id", user.id).single();
 
         if (settings) {
-          aiApiKey = settings.ai_api_key ?? SERVER_GEMINI_KEY;
+          aiApiKey = settings.ai_api_key ?? "";
           aiBaseUrl = settings.ai_base_url ?? "";
-          aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
+          aiModel = settings.ai_model ?? "";
           if (aiBaseUrl.includes("groq.com") && GROQ_MODEL_MAP[aiModel]) {
             aiModel = GROQ_MODEL_MAP[aiModel];
           }
@@ -68,15 +66,18 @@ serve(async (req) => {
 
     let result: { modelUsed: string; json: any };
 
+    const parts = [
+      { text: PROMPT },
+      { inline_data: { mime_type: mime_type || "image/jpeg", data: image_base64 } },
+    ];
+
     if (aiBaseUrl && !aiBaseUrl.includes("generativelanguage.googleapis.com")) {
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT);
     } else if (aiApiKey) {
-      result = await callGeminiWithFallback(aiApiKey, [
-        { text: PROMPT },
-        { inline_data: { mime_type: mime_type || "image/jpeg", data: image_base64 } },
-      ], {} as any);
+      const modelChain = aiModel ? [aiModel, ...GEMINI_VISION_CHAIN.filter((m) => m !== aiModel)] : GEMINI_VISION_CHAIN;
+      result = await callGeminiWithFallback(aiApiKey, parts, {} as any, modelChain);
     } else {
-      return new Response(JSON.stringify({ error: "No AI configured." }), {
+      return new Response(JSON.stringify({ error: "No AI configured. Add an API key in Settings." }), {
         status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS },
       });
     }

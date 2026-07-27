@@ -37,7 +37,7 @@ serve(async (req) => {
     const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
     let aiApiKey = "";
     let aiBaseUrl = "";
-    let aiModel = GEMINI_VISION_CHAIN[0];
+    let aiModel = "";
 
     if (jwt) {
       const supabase = createClient(
@@ -54,7 +54,7 @@ serve(async (req) => {
         if (settings) {
           aiApiKey = settings.ai_api_key ?? "";
           aiBaseUrl = settings.ai_base_url ?? "";
-          aiModel = settings.ai_model ?? GEMINI_VISION_CHAIN[0];
+          aiModel = settings.ai_model ?? "";
           // Fix decommissioned Groq models
           if (aiBaseUrl.includes("groq.com") && GROQ_MODEL_MAP[aiModel]) {
             aiModel = GROQ_MODEL_MAP[aiModel];
@@ -76,8 +76,10 @@ serve(async (req) => {
       console.log("[product-identify-photo] Calling OpenAI-compatible:", { baseUrl: aiBaseUrl, model: aiModel });
       result = await callOpenAICompatible(aiBaseUrl, aiApiKey, aiModel, image_base64, mime_type || "image/jpeg", PROMPT);
     } else if (aiApiKey) {
-      console.log("[product-identify-photo] Calling Gemini");
-      result = await callGeminiWithFallback(aiApiKey, parts, {} as any);
+      // Use user's model first, then fall back to the chain
+      const modelChain = aiModel ? [aiModel, ...GEMINI_VISION_CHAIN.filter((m) => m !== aiModel)] : GEMINI_VISION_CHAIN;
+      console.log("[product-identify-photo] Calling Gemini:", { modelChain });
+      result = await callGeminiWithFallback(aiApiKey, parts, {} as any, modelChain);
     } else {
       return new Response(JSON.stringify({ error: "No AI configured. Add an API key in Settings." }), {
         status: 400, headers: { "Content-Type": "application/json", ...CORS_HEADERS },
