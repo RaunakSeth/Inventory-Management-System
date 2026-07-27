@@ -122,7 +122,7 @@ export function BillScanner() {
       setPhoto(null);
       setVendor(null);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setErrorMsg((err as any)?.message ?? String(err));
     } finally {
       setLoading(false);
     }

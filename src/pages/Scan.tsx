@@ -151,7 +151,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
       setQuantity(1); setMinQuantity(1); setUnit("pcs");
       setStage("form");
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setErrorMsg((err as any)?.message ?? String(err));
       setStage("form");
     }
   }

@@ -23,7 +23,7 @@ export function BarcodeScanner({ onDetected, active }: Props) {
       onDetected(result.rawValue);
     },
     onError(err) {
-      setLastError(err instanceof Error ? err.message : String(err));
+      setLastError((err as any)?.message ?? String(err));
     },
     constraints: {
       video: { facingMode: "environment" }, // rear camera

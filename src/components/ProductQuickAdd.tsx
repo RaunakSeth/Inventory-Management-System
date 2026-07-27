@@ -43,7 +43,7 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
           setStage("needs_photo");
         }
       })
-      .catch((err) => setErrorMsg(String(err)));
+      .catch((err) => setErrorMsg(err?.message ?? String(err)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barcode]);
 
@@ -113,8 +113,8 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
       });
 
       onDone();
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+    } catch (err: any) {
+      setErrorMsg(err?.message ?? String(err));
       setStage("confirm");
     }
   }
