@@ -4,6 +4,8 @@ import { useNotifications } from "../components/Notifications";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useSettings, type FieldId } from "../lib/settings";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
+import { Card } from "@astryxdesign/core/Card";
+import { Badge } from "@astryxdesign/core/Badge";
 import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar } from "lucide-react";
 import type { Location } from "../lib/types";
 
@@ -471,14 +473,9 @@ function StockCard({
   const isWarning = row.estimated_days_remaining !== null && row.estimated_days_remaining > 2;
 
   return (
-    <div
-      className={"rounded-xl border overflow-hidden " + (
-        isLow && isUrgent
-          ? "bg-red-900/20 border-red-800/30"
-          : isLow && isWarning
-          ? "bg-amber-900/20 border-amber-800/30"
-          : "bg-slate-900/80 border-slate-800/50"
-      )}
+    <Card
+      padding={0}
+      variant={isLow && isUrgent ? "red" : isLow && isWarning ? "orange" : "default"}
     >
       <div className="p-3 flex items-center gap-3">
         {visibleFields.includes("image") && (
@@ -602,14 +599,10 @@ function StockCard({
             );
           })()}
           {visibleFields.includes("consumption") && row.avg_daily_consumption != null && row.avg_daily_consumption > 0 && (
-            <span className="text-[10px] text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
-              {row.avg_daily_consumption} {row.unit}/day
-            </span>
+            <Badge label={`${row.avg_daily_consumption} ${row.unit}/day`} />
           )}
           {visibleFields.includes("min_quantity") && row.min_quantity > 0 && (
-            <span className="text-[10px] text-slate-500 bg-slate-800/80 px-1.5 py-0.5 rounded">
-              min {row.min_quantity}
-            </span>
+            <Badge label={`min ${row.min_quantity}`} />
           )}
           {visibleFields.includes("last_restocked") && row.last_restocked_at && (
             <span className="text-[10px] text-slate-600">
@@ -618,6 +611,6 @@ function StockCard({
           )}
         </div>
       )}
-    </div>
+    </Card>
   );
 }
