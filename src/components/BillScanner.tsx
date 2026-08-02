@@ -3,6 +3,7 @@ import Webcam from "react-webcam";
 import { parseBillPhoto, friendlyAIError } from "../lib/edgeFunctions";
 import { useNotifications } from "./Notifications";
 import { supabase } from "../lib/supabase";
+import { Button } from "@astryxdesign/core/Button";
 import type { BillLineItem } from "../lib/types";
 
 interface ReviewRow extends BillLineItem {
@@ -144,13 +145,13 @@ export function BillScanner() {
               className="w-full"
             />
           </div>
-          <button
+          <Button
+            label={loading ? "Reading bill…" : "Capture bill"}
+            variant="primary"
+            isLoading={loading}
             onClick={capture}
-            disabled={loading}
-            className="w-full py-3 rounded-lg bg-emerald-500 font-medium disabled:opacity-50"
-          >
-            {loading ? "Reading bill…" : "Capture bill"}
-          </button>
+            width="100%"
+          />
         </>
       )}
 
@@ -185,22 +186,21 @@ export function BillScanner() {
             </div>
           ))}
           <div className="flex gap-2">
-            <button
+            <Button
+              label={loading ? "Saving…" : "Confirm & update stock"}
+              variant="primary"
+              isLoading={loading}
               onClick={confirmAndSave}
-              disabled={loading}
-              className="flex-1 py-3 rounded-lg bg-emerald-500 font-medium disabled:opacity-50"
-            >
-              {loading ? "Saving…" : "Confirm & update stock"}
-            </button>
-            <button
+              width="100%"
+            />
+            <Button
+              label="Retake"
+              variant="secondary"
               onClick={() => {
                 setRows(null);
                 setPhoto(null);
               }}
-              className="px-4 py-3 rounded-lg bg-slate-800"
-            >
-              Retake
-            </button>
+            />
           </div>
         </div>
       )}

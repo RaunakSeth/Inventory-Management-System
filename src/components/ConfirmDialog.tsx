@@ -42,6 +42,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           title={options.title}
           description={options.description}
           actionLabel={options.actionLabel}
+          width="min(400px, calc(100vw - 32px))"
           onAction={() => {
             options.onAction();
             setOpen(false);

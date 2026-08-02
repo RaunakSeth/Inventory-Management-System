@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { TextInput } from "@astryxdesign/core/TextInput";
+import { Button } from "@astryxdesign/core/Button";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Package, Mail, Lock, User, ArrowRight, CheckCircle, Eye, EyeOff } from "lucide-react";
 
 type Mode = "login" | "signup" | "magic_link_sent" | "set_password";
@@ -215,37 +218,46 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               <h1 className="text-2xl font-bold">Set Your Password</h1>
               <p className="text-sm text-slate-500 mt-1">Secure your account with a password</p>
             </div>
-            <form onSubmit={handleSetPassword} className="space-y-3">
+            <form onSubmit={handleSetPassword} className="space-y-5">
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
+                <TextInput
+                  label="New password"
+                  isLabelHidden
                   type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="New password"
+                  size="lg"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl bg-slate-800 pl-10 pr-10 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition"
+                  onChange={setPassword}
+                  placeholder="New password"
+                  isRequired
+                  startIcon={<Lock className="w-4 h-4" />}
                 />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300" aria-label={showPassword ? "Hide password" : "Show password"}>
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                <input
+                <TextInput
+                  label="Confirm password"
+                  isLabelHidden
                   type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="Confirm password"
+                  size="lg"
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-xl bg-slate-800 pl-10 pr-4 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition"
+                  onChange={setConfirmPassword}
+                  placeholder="Confirm password"
+                  isRequired
+                  startIcon={<Lock className="w-4 h-4" />}
                 />
               </div>
               <PasswordChecks password={password} />
               {errorMsg && <p className="text-red-400 text-sm">{errorMsg}</p>}
-              <button type="submit" disabled={sending} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 font-medium text-sm hover:bg-emerald-400 transition disabled:opacity-50">
-                {sending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : "Set password & continue"}
-              </button>
+              <Button
+                label={sending ? "Setting password..." : "Set password & continue"}
+                type="submit"
+                variant="primary"
+                width="100%"
+                isLoading={sending}
+                isDisabled={sending}
+              />
               <button type="button" onClick={() => setMode("login")} className="w-full py-2 text-sm text-slate-500 hover:text-slate-300 transition">
                 Skip for now
               </button>
@@ -287,68 +299,137 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </div>
         ) : (
           <>
-            <div className="flex gap-2 bg-slate-900 rounded-xl p-1 border border-slate-800 mb-4">
-              <button onClick={() => { setMode("login"); setErrorMsg(null); }} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition ${mode === "login" ? "bg-emerald-500 text-white" : "text-slate-400 hover:text-slate-300"}`}>
-                Login
-              </button>
-              <button onClick={() => { setMode("signup"); setErrorMsg(null); }} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition ${mode === "signup" ? "bg-emerald-500 text-white" : "text-slate-400 hover:text-slate-300"}`}>
-                Sign Up
-              </button>
+            <div className="mb-6">
+              <SegmentedControl
+                label="Auth mode"
+                value={mode === "signup" ? "signup" : "login"}
+                onChange={(v) => { setMode(v as "login" | "signup"); setErrorMsg(null); }}
+                layout="fill"
+                size="lg"
+              >
+                <SegmentedControlItem value="login" label="Login" />
+                <SegmentedControlItem value="signup" label="Sign Up" />
+              </SegmentedControl>
             </div>
 
             {mode === "login" && (
-              <form onSubmit={handleLogin} className="space-y-3">
+              <form onSubmit={handleLogin} className="space-y-5">
+                <TextInput
+                  label="Email"
+                  isLabelHidden
+                  type="email"
+                  size="lg"
+                  value={email}
+                  onChange={setEmail}
+                  placeholder="Email"
+                  isRequired
+                  startIcon={<Mail className="w-4 h-4" />}
+                />
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl bg-slate-800 pl-10 pr-4 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition" />
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input type={showPassword ? "text" : "password"} required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl bg-slate-800 pl-10 pr-10 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  <TextInput
+                    label="Password"
+                    isLabelHidden
+                    type={showPassword ? "text" : "password"}
+                    size="lg"
+                    value={password}
+                    onChange={setPassword}
+                    placeholder="Password"
+                    isRequired
+                    startIcon={<Lock className="w-4 h-4" />}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300" aria-label={showPassword ? "Hide password" : "Show password"}>
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
                 {errorMsg && <p className="text-red-400 text-sm">{errorMsg}</p>}
-                <button type="submit" disabled={sending || !email || !password} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 font-medium text-sm hover:bg-emerald-400 transition disabled:opacity-50">
-                  {sending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <>Login <ArrowRight className="w-4 h-4" /></>}
-                </button>
+                <Button
+                  label={sending ? "Logging in..." : "Login"}
+                  type="submit"
+                  variant="primary"
+                  width="100%"
+                  isLoading={sending}
+                  isDisabled={sending || !email || !password}
+                  icon={<ArrowRight className="w-4 h-4" />}
+                />
                 <div className="relative my-4">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800" /></div>
                   <div className="relative flex justify-center"><span className="bg-slate-950 px-3 text-xs text-slate-600">or</span></div>
                 </div>
-                <button type="button" onClick={handleMagicLink} disabled={sending || !email} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 border border-slate-700 font-medium text-sm text-slate-300 hover:bg-slate-700 transition disabled:opacity-50">
-                  {sending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <>Send magic link <Mail className="w-4 h-4" /></>}
-                </button>
+                <Button
+                  label={sending ? "Sending link..." : "Send magic link"}
+                  type="button"
+                  variant="secondary"
+                  width="100%"
+                  isLoading={sending}
+                  isDisabled={sending || !email}
+                  onClick={handleMagicLink}
+                  icon={<Mail className="w-4 h-4" />}
+                />
               </form>
             )}
 
             {mode === "signup" && (
-              <form onSubmit={handleSignUp} className="space-y-3">
+              <form onSubmit={handleSignUp} className="space-y-5">
+                <TextInput
+                  label="Email"
+                  isLabelHidden
+                  type="email"
+                  size="lg"
+                  value={email}
+                  onChange={setEmail}
+                  placeholder="Email"
+                  isRequired
+                  startIcon={<Mail className="w-4 h-4" />}
+                />
+                <TextInput
+                  label="Username"
+                  isLabelHidden
+                  type="text"
+                  size="lg"
+                  value={username}
+                  onChange={setUsername}
+                  placeholder="Username"
+                  isRequired
+                  startIcon={<User className="w-4 h-4" />}
+                />
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full rounded-xl bg-slate-800 pl-10 pr-4 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition" />
-                </div>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input type="text" required placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full rounded-xl bg-slate-800 pl-10 pr-4 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition" />
-                </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input type={showPassword ? "text" : "password"} required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full rounded-xl bg-slate-800 pl-10 pr-10 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                  <TextInput
+                    label="Password"
+                    isLabelHidden
+                    type={showPassword ? "text" : "password"}
+                    size="lg"
+                    value={password}
+                    onChange={setPassword}
+                    placeholder="Password"
+                    isRequired
+                    startIcon={<Lock className="w-4 h-4" />}
+                  />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300" aria-label={showPassword ? "Hide password" : "Show password"}>
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input type={showPassword ? "text" : "password"} required placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full rounded-xl bg-slate-800 pl-10 pr-4 py-3 text-sm border border-slate-700 focus:border-emerald-500/50 focus:outline-none transition" />
-                </div>
+                <TextInput
+                  label="Confirm password"
+                  isLabelHidden
+                  type={showPassword ? "text" : "password"}
+                  size="lg"
+                  value={confirmPassword}
+                  onChange={setConfirmPassword}
+                  placeholder="Confirm password"
+                  isRequired
+                  startIcon={<Lock className="w-4 h-4" />}
+                />
                 <PasswordChecks password={password} />
                 {errorMsg && <p className="text-red-400 text-sm">{errorMsg}</p>}
-                <button type="submit" disabled={sending} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-500 font-medium text-sm hover:bg-emerald-400 transition disabled:opacity-50">
-                  {sending ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <>Create account <ArrowRight className="w-4 h-4" /></>}
-                </button>
+                <Button
+                  label={sending ? "Creating account..." : "Create account"}
+                  type="submit"
+                  variant="primary"
+                  width="100%"
+                  isLoading={sending}
+                  isDisabled={sending}
+                  icon={<ArrowRight className="w-4 h-4" />}
+                />
               </form>
             )}
           </>

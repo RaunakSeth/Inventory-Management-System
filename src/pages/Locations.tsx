@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
 import { useConfirm } from "../components/ConfirmDialog";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
@@ -8,6 +8,7 @@ import { TextInput } from "@astryxdesign/core/TextInput";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Section } from "@astryxdesign/core/Section";
+import { Selector } from "@astryxdesign/core/Selector";
 import { MapPin, Plus, Trash2, Edit3, Check, X } from "lucide-react";
 import type { Location } from "../lib/types";
 
@@ -77,7 +78,7 @@ export function Locations() {
   const childrenOf = (parentId: string) => locations.filter((l) => l.parent_id === parentId);
 
   return (
-    <div className="p-4 space-y-4 max-w-2xl mx-auto pb-24">
+    <div className="p-4 md:p-6 space-y-5 max-w-4xl mx-auto pb-24">
       <div className="flex items-center gap-3">
         <MapPin className="w-6 h-6 text-emerald-400" />
         <h1 className="text-xl font-bold">Locations</h1>
@@ -95,16 +96,16 @@ export function Locations() {
         <Section variant="muted" padding={4}>
           <p className="text-sm font-medium mb-3">New location</p>
           <TextInput label="Name" value={newName} onChange={setNewName} placeholder="e.g. Kitchen store" />
-          <label className="block text-sm mt-2">
-            Parent (optional)
-            <select value={newParent} onChange={(e) => setNewParent(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1">
-              <option value="">None (root level)</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex gap-2 mt-3">
+          <Selector
+            label="Parent (optional)"
+            value={newParent}
+            onChange={(v) => setNewParent(v ?? "")}
+            hasClear
+            placeholder="None (root level)"
+            options={locations.map((l) => ({ value: l.id, label: l.name }))}
+            width="100%"
+          />
+          <div className="flex gap-3 mt-4">
             <Button label={saving ? "Saving..." : "Create"} variant="primary" isLoading={saving} isDisabled={!newName.trim()} onClick={createLocation} />
             <Button label="Cancel" variant="secondary" onClick={() => setShowForm(false)} />
           </div>
@@ -127,7 +128,25 @@ export function Locations() {
             <LocationItem
               key={loc.id}
               location={loc}
-              children={childrenOf(loc.id)}
+              children={childrenOf(loc.id).map((child) => (
+                <LocationItem
+                  key={child.id}
+                  location={child}
+                  editingId={editingId}
+                  editName={editName}
+                  setEditName={setEditName}
+                  onStartEdit={() => { setEditingId(child.id); setEditName(child.name); }}
+                  onSaveEdit={() => updateLocation(child.id)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onDelete={() => showConfirm({
+                    title: `Delete "${child.name}"?`,
+                    description: "Items in this location will lose their location reference.",
+                    actionLabel: "Delete",
+                    onAction: () => deleteLocation(child.id),
+                  })}
+                  saving={saving}
+                />
+              ))}
               editingId={editingId}
               editName={editName}
               setEditName={setEditName}
@@ -154,7 +173,7 @@ function LocationItem({
   onStartEdit, onSaveEdit, onCancelEdit, onDelete, saving,
 }: {
   location: Location;
-  children: Location[];
+  children?: ReactNode;
   editingId: string | null;
   editName: string;
   setEditName: (v: string) => void;
@@ -168,10 +187,10 @@ function LocationItem({
 
   return (
     <div>
-      <div className="flex items-center gap-2 bg-slate-900/80 rounded-xl px-3 py-2.5 border border-slate-800/50">
+      <div className="flex items-center gap-2 bg-slate-900/80 rounded-xl px-3 md:px-4 py-3 border border-slate-800/50">
         <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
         {isEditing ? (
-          <div className="flex items-center gap-1 flex-1">
+          <div className="flex items-center gap-2 flex-1">
             <TextInput label="" isLabelHidden value={editName} onChange={setEditName} size="sm" />
             <IconButton icon={<Check className="w-3 h-3" />} label="Save" size="sm" onClick={onSaveEdit} />
             <IconButton icon={<X className="w-3 h-3" />} label="Cancel" size="sm" onClick={onCancelEdit} />
@@ -179,30 +198,16 @@ function LocationItem({
         ) : (
           <>
             <span className="text-sm flex-1">{location.name}</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <IconButton icon={<Edit3 className="w-3 h-3" />} label="Edit" size="sm" onClick={onStartEdit} />
-              <IconButton icon={<Trash2 className="w-3 h-3" />} label="Delete" size="sm" onClick={onDelete} />
+              <IconButton icon={<Trash2 className="w-3 h-3" />} label="Delete" size="sm" variant="destructive" onClick={onDelete} />
             </div>
           </>
         )}
       </div>
-      {children.length > 0 && (
-        <div className="ml-6 mt-1 space-y-1">
-          {children.map((child) => (
-            <LocationItem
-              key={child.id}
-              location={child}
-              children={[]}
-              editingId={editingId}
-              editName={editName}
-              setEditName={setEditName}
-              onStartEdit={() => { /* inline edit only works for parent - children use root pattern too */ }}
-              onSaveEdit={onSaveEdit}
-              onCancelEdit={onCancelEdit}
-              onDelete={onDelete}
-              saving={saving}
-            />
-          ))}
+      {children && (
+        <div className="ml-7 mt-2 space-y-2">
+          {children}
         </div>
       )}
     </div>

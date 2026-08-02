@@ -4,6 +4,7 @@ import { Button } from "@astryxdesign/core/Button";
 import { IconButton } from "@astryxdesign/core/IconButton";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Selector } from "@astryxdesign/core/Selector";
 import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Section } from "@astryxdesign/core/Section";
@@ -99,12 +100,21 @@ export function ShoppingList() {
   }
 
   async function addLowStockToShopping() {
-    const { data: lowItems } = await supabase
-      .from("stock_items")
-      .select("id, product_id, quantity, unit, min_quantity, product_library(name)")
-      .lte("quantity", "min_quantity");
+    const [{ data: allItems }, { data: existing }] = await Promise.all([
+      supabase
+        .from("stock_items")
+        .select("id, product_id, quantity, unit, min_quantity, product_library(name)"),
+      supabase.from("shopping_list").select("product_id").eq("done", false),
+    ]);
 
-    if (!lowItems?.length) return;
+    if (!allItems?.length) return;
+
+    const alreadyPending = new Set((existing ?? []).map((e: any) => e.product_id));
+
+    const lowItems = allItems.filter(
+      (item: any) => item.quantity <= item.min_quantity && !alreadyPending.has(item.product_id)
+    );
+    if (!lowItems.length) return;
 
     const rows = lowItems.map((item: any) => ({
       product_id: item.product_id,
@@ -158,7 +168,7 @@ export function ShoppingList() {
   const done = items.filter((i) => i.done);
 
   return (
-    <div className="p-4 space-y-4 max-w-2xl mx-auto pb-24">
+    <div className="p-4 md:p-6 space-y-5 max-w-4xl mx-auto pb-24">
       <div className="flex items-center gap-3">
         <ShoppingCart className="w-6 h-6 text-emerald-400" />
         <h1 className="text-xl font-bold">Shopping List</h1>
@@ -167,7 +177,7 @@ export function ShoppingList() {
             {pending.length}
           </span>
         )}
-        <div className="ml-auto flex gap-2">
+        <div className="ml-auto flex gap-3">
           <Button label="+ Low stock" size="sm" variant="secondary" onClick={addLowStockToShopping} />
           <IconButton icon={<Plus className="w-4 h-4" />} label="Add item" size="sm" onClick={() => setShowForm(!showForm)} />
         </div>
@@ -179,31 +189,34 @@ export function ShoppingList() {
 
       {showForm && (
         <Section variant="muted" padding={4}>
-          <label className="block text-sm">
-            Product
-            <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1">
-              <option value="">Select existing product...</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </label>
+          <Selector
+            label="Product"
+            value={selectedProduct}
+            onChange={(v) => setSelectedProduct(v ?? "")}
+            hasClear
+            placeholder="Select existing product..."
+            options={products.map((p) => ({ value: p.id, label: p.name }))}
+            width="100%"
+          />
           {!selectedProduct && (
             <TextInput label="Or type a name" value={newItemName} onChange={setNewItemName} placeholder="e.g. Eggs" />
           )}
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <NumberInput label="Qty" value={newItemQty} onChange={(val) => setNewItemQty(val ?? 1)} min={1} />
-            <label className="flex-1 text-sm">
-              Unit
-              <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)} className="w-full mt-1 rounded bg-slate-800 px-2 py-1">
-                {units.length > 0
-                  ? units.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)
-                  : <option value="pcs">pcs</option>}
-              </select>
-            </label>
+            <div className="flex-1">
+              <Selector
+                label="Unit"
+                value={newItemUnit}
+                onChange={setNewItemUnit}
+                options={units.length > 0
+                  ? units.map((u) => ({ value: u.name, label: u.name }))
+                  : [{ value: "pcs", label: "pcs" }]}
+                width="100%"
+              />
+            </div>
           </div>
           <TextInput label="Note" value={newItemNote} onChange={setNewItemNote} placeholder="Optional" />
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <Button label="Add" variant="primary" onClick={addItem} width="100%" />
             <Button label="Cancel" variant="secondary" onClick={() => setShowForm(false)} />
           </div>
@@ -264,7 +277,7 @@ export function ShoppingList() {
 function ShoppingItemCard({ item, onToggle, onRemove }: { item: any; onToggle: () => void; onRemove: () => void }) {
   const product = item.product_library;
   return (
-    <div className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border transition ${item.done ? "bg-slate-900/30 border-slate-800/30 opacity-50" : "bg-slate-900/80 border-slate-800/50"}`}>
+    <div className={`flex items-center gap-3 rounded-xl px-3 md:px-4 py-3 border transition ${item.done ? "bg-slate-900/30 border-slate-800/30 opacity-50" : "bg-slate-900/80 border-slate-800/50"}`}>
       <button onClick={onToggle} className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition ${item.done ? "bg-emerald-500 border-emerald-500" : "border-slate-600 hover:border-emerald-400"}`}>
         {item.done && <Check className="w-3 h-3 text-white" />}
       </button>

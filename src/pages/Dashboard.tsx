@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useNotifications } from "../components/Notifications";
 import { useConfirm } from "../components/ConfirmDialog";
+import { ProductEditorDialog } from "../components/ProductEditorDialog";
 import { useSettings, type FieldId } from "../lib/settings";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Card } from "@astryxdesign/core/Card";
@@ -13,12 +14,16 @@ import { Spinner } from "@astryxdesign/core/Spinner";
 import { StatusDot } from "@astryxdesign/core/StatusDot";
 import { Thumbnail } from "@astryxdesign/core/Thumbnail";
 import { Banner } from "@astryxdesign/core/Banner";
+import { Selector } from "@astryxdesign/core/Selector";
+import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { TextInput } from "@astryxdesign/core/TextInput";
 import { Section } from "@astryxdesign/core/Section";
 import { List } from "@astryxdesign/core/List";
 import { ListItem } from "@astryxdesign/core/List";
 import { Collapsible } from "@astryxdesign/core/Collapsible";
 import { Timestamp } from "@astryxdesign/core/Timestamp";
-import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar, Store, DollarSign, Tag } from "lucide-react";
+import { AlertTriangle, Clock, Package, Plus, Minus, Trash2, AlertCircle, History, MapPin, Calendar, Store, DollarSign, Tag, IndianRupee } from "lucide-react";
+import { useCurrency, formatMoney } from "../lib/currency";
 import type { Location, ProductGroup } from "../lib/types";
 
 interface StockRow {
@@ -34,6 +39,7 @@ interface StockRow {
   avg_daily_consumption: number | null;
   estimated_days_remaining: number | null;
   location_name: string | null;
+  location_id: string | null;
   image_url: string | null;
   best_before_date: string | null;
   last_restocked_at: string | null;
@@ -55,6 +61,7 @@ export function Dashboard() {
   const { addNotification } = useNotifications();
   const { showConfirm } = useConfirm();
   const { settings } = useSettings();
+  const { currency, convertFromBase } = useCurrency();
   const [rows, setRows] = useState<StockRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,14 +74,17 @@ export function Dashboard() {
   const [activatingLocation, setActivatingLocation] = useState<string | null>(null);
   const [allGroups, setAllGroups] = useState<ProductGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string>("all");
+  const [tagList, setTagList] = useState<{ id: string; name: string; color: string }[]>([]);
+  const [editProduct, setEditProduct] = useState<StockRow | null>(null);
   const [inventoryValue, setInventoryValue] = useState<number | null>(null);
+  const alertedRef = useRef(false);
 
   async function fetchStock() {
     setLoading(true);
     const { data } = await supabase
       .from("stock_items")
       .select(`
-        id, product_id, quantity, unit, min_quantity,
+        id, product_id, quantity, unit, min_quantity, location_id,
         avg_daily_consumption, last_restocked_at, best_before_date,
         product_library!inner(name, category, brand, barcode, image_url, product_group_id),
         locations(name)
@@ -98,6 +108,7 @@ export function Dashboard() {
           avg_daily_consumption: avg,
           estimated_days_remaining: daysLeft,
           location_name: r.locations?.name ?? null,
+          location_id: r.location_id ?? null,
           image_url: r.product_library?.image_url ?? null,
           best_before_date: r.best_before_date ?? null,
           last_restocked_at: r.last_restocked_at ?? null,
@@ -106,84 +117,91 @@ export function Dashboard() {
       });
       setRows(mapped);
 
-      // Smart notifications — only alert when stock is actually running out
-      const now = new Date();
-      const smartAlerts: { row: StockRow; reason: string; urgency: "high" | "medium" | "low" }[] = [];
+      // Smart notifications — only alert when stock is actually running out.
+      // Deduped by item (expiry beats stock) and fired once per page load.
+      const alerts: { row: StockRow; reason: string; urgency: "high" | "medium" | "low"; kind: "stock" | "expiry" }[] = [];
 
       for (const r of mapped) {
-        // 1. Has consumption data → use days remaining
-        if (r.avg_daily_consumption && r.avg_daily_consumption > 0) {
-          const daysLeft = r.quantity / r.avg_daily_consumption;
-          if (daysLeft <= 1) {
-            smartAlerts.push({ row: r, reason: `Runs out today/tomorrow (${Math.round(daysLeft * 10) / 10}d left)`, urgency: "high" });
-          } else if (daysLeft <= 3) {
-            smartAlerts.push({ row: r, reason: `${Math.round(daysLeft)}d of supply left`, urgency: "medium" });
-          }
-          continue;
-        }
-
-        // 2. Expiring soon — more important than low stock
+        // 1. Expiry first — it's more time-critical than low stock
         if (r.best_before_date) {
           const days = daysUntil(r.best_before_date);
           if (days < 0) {
-            smartAlerts.push({ row: r, reason: `Expired ${Math.abs(days)}d ago`, urgency: "high" });
+            alerts.push({ row: r, reason: `Expired ${Math.abs(days)}d ago`, urgency: "high", kind: "expiry" });
             continue;
           }
           if (days <= 2) {
-            smartAlerts.push({ row: r, reason: days === 0 ? "Expires today" : `Expires in ${days}d`, urgency: "high" });
+            alerts.push({ row: r, reason: days === 0 ? "Expires today" : `Expires in ${days}d`, urgency: "high", kind: "expiry" });
+            continue;
+          }
+          if (days <= settings.notifications_days_before_expiry) {
+            alerts.push({ row: r, reason: `Expires in ${days}d`, urgency: "medium", kind: "expiry" });
+            continue;
+          }
+        }
+
+        // 2. Has consumption data → use days remaining
+        if (r.avg_daily_consumption && r.avg_daily_consumption > 0) {
+          const daysLeft = r.quantity / r.avg_daily_consumption;
+          if (daysLeft <= 1) {
+            alerts.push({ row: r, reason: `Runs out today/tomorrow (${Math.round(daysLeft * 10) / 10}d left)`, urgency: "high", kind: "stock" });
+            continue;
+          }
+          if (daysLeft <= 3) {
+            alerts.push({ row: r, reason: `${Math.round(daysLeft)}d of supply left`, urgency: "medium", kind: "stock" });
             continue;
           }
         }
 
         // 3. No consumption data — only alert if significantly below min
         if (r.quantity < r.min_quantity) {
-          smartAlerts.push({ row: r, reason: `Only ${r.quantity} ${r.unit} left (min: ${r.min_quantity})`, urgency: "medium" });
+          alerts.push({ row: r, reason: `Only ${r.quantity} ${r.unit} left (min: ${r.min_quantity})`, urgency: "medium", kind: "stock" });
         } else if (r.quantity === r.min_quantity && r.min_quantity > 1) {
-          // Only alert at min if min is meaningful (>1)
-          smartAlerts.push({ row: r, reason: `At minimum (${r.quantity} ${r.unit})`, urgency: "low" });
+          alerts.push({ row: r, reason: `At minimum (${r.quantity} ${r.unit})`, urgency: "low", kind: "stock" });
         }
       }
 
-      if (smartAlerts.length > 0) {
-        const high = smartAlerts.filter((a) => a.urgency === "high");
-        const med = smartAlerts.filter((a) => a.urgency === "medium");
+      if (alerts.length > 0 && !alertedRef.current) {
+        alertedRef.current = true;
+        const stockAlerts = settings.notifications_low_stock ? alerts.filter((a) => a.kind === "stock") : [];
+        const expiryAlerts = settings.notifications_expiring ? alerts.filter((a) => a.kind === "expiry") : [];
 
-        if (high.length > 0) {
+        const highStock = stockAlerts.filter((a) => a.urgency === "high");
+        const medStock = stockAlerts.filter((a) => a.urgency === "medium" || a.urgency === "low");
+        const highExpiry = expiryAlerts.filter((a) => a.urgency === "high");
+        const medExpiry = expiryAlerts.filter((a) => a.urgency === "medium" || a.urgency === "low");
+
+        if (highStock.length > 0) {
           addNotification({
             type: "error",
             title: "Urgent: Stock Running Out",
-            message: high.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (high.length > 3 ? ` +${high.length - 3} more` : ""),
+            message: highStock.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (highStock.length > 3 ? ` +${highStock.length - 3} more` : ""),
             duration: 10000,
           });
         }
-        if (med.length > 0) {
+        if (medStock.length > 0) {
           addNotification({
             type: "warning",
             title: "Stock Getting Low",
-            message: med.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (med.length > 3 ? ` +${med.length - 3} more` : ""),
+            message: medStock.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (medStock.length > 3 ? ` +${medStock.length - 3} more` : ""),
             duration: 8000,
           });
         }
-      }
-
-      const expiringItems = mapped.filter((r) => r.best_before_date && daysUntil(r.best_before_date) <= 3 && daysUntil(r.best_before_date) >= 0);
-      if (expiringItems.length > 0) {
-        addNotification({
-          type: "warning",
-          title: "Expiring Soon",
-          message: `${expiringItems.length} item${expiringItems.length > 1 ? "s" : ""} expiring soon: ${expiringItems.slice(0, 3).map((r) => r.product_name).join(", ")}`,
-          duration: 8000,
-        });
-      }
-
-      const expiredItems = mapped.filter((r) => r.best_before_date && daysUntil(r.best_before_date) < 0);
-      if (expiredItems.length > 0) {
-        addNotification({
-          type: "error",
-          title: "Expired Items",
-          message: `${expiredItems.length} item${expiredItems.length > 1 ? "s" : ""} expired: ${expiredItems.slice(0, 3).map((r) => r.product_name).join(", ")}`,
-          duration: 10000,
-        });
+        if (highExpiry.length > 0) {
+          addNotification({
+            type: "error",
+            title: "Expired or Expiring Now",
+            message: highExpiry.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (highExpiry.length > 3 ? ` +${highExpiry.length - 3} more` : ""),
+            duration: 10000,
+          });
+        }
+        if (medExpiry.length > 0) {
+          addNotification({
+            type: "warning",
+            title: "Expiring Soon",
+            message: medExpiry.slice(0, 3).map((a) => `${a.row.product_name}: ${a.reason}`).join(", ") + (medExpiry.length > 3 ? ` +${medExpiry.length - 3} more` : ""),
+            duration: 8000,
+          });
+        }
       }
     }
     setLoading(false);
@@ -199,20 +217,33 @@ export function Dashboard() {
     if (data) setAllGroups(data as ProductGroup[]);
   }
 
+  async function fetchTags() {
+    const { data } = await supabase.from("tags").select("*").order("name");
+    if (data) setTagList(data as { id: string; name: string; color: string }[]);
+  }
+
   async function fetchInventoryValue() {
-    const { data } = await supabase
-      .from("transactions")
-      .select("unit_price, quantity_change, stock_item_id")
-      .not("unit_price", "is", null);
-    if (data && data.length > 0) {
-      let total = 0;
-      for (const t of data) {
-        if (t.unit_price && t.quantity_change > 0) {
-          total += t.unit_price * t.quantity_change;
-        }
+    const [{ data: stocks }, { data: prices }] = await Promise.all([
+      supabase.from("stock_items").select("id, quantity"),
+      supabase.from("transactions")
+        .select("stock_item_id, unit_price")
+        .not("unit_price", "is", null)
+        .order("created_at", { ascending: false }),
+    ]);
+    if (!stocks || !prices) return;
+    // Latest recorded price per stock item
+    const latestPrice = new Map<string, number>();
+    for (const t of prices as any[]) {
+      if (t.unit_price != null && !latestPrice.has(t.stock_item_id)) {
+        latestPrice.set(t.stock_item_id, t.unit_price);
       }
-      setInventoryValue(total);
     }
+    let total = 0;
+    for (const s of stocks as any[]) {
+      const p = latestPrice.get(s.id);
+      if (p != null) total += s.quantity * p;
+    }
+    setInventoryValue(total);
   }
 
   async function fetchRecentTransactions() {
@@ -234,6 +265,7 @@ export function Dashboard() {
     fetchLocations();
     fetchRecentTransactions();
     fetchGroups();
+    fetchTags();
     fetchInventoryValue();
   }, []);
 
@@ -334,7 +366,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="p-4 space-y-4 max-w-2xl mx-auto pb-24">
+    <div className="p-4 md:p-6 space-y-5 max-w-4xl mx-auto pb-24">
       <div className="flex items-center gap-3">
         <AlertTriangle className="w-6 h-6 text-amber-400" />
         <h1 className="text-xl font-bold">Needs Refilling</h1>
@@ -347,24 +379,22 @@ export function Dashboard() {
 
       {!loading && inventoryValue !== null && inventoryValue > 0 && (
         <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-2.5">
-          <DollarSign className="w-4 h-4 text-emerald-400" />
-          <span className="text-sm text-emerald-300">Inventory value: <span className="font-semibold">${inventoryValue.toFixed(2)}</span></span>
+          {currency === "INR" ? <IndianRupee className="w-4 h-4 text-emerald-400" /> : <DollarSign className="w-4 h-4 text-emerald-400" />}
+          <span className="text-sm text-emerald-300">Inventory value: <span className="font-semibold">{formatMoney(convertFromBase(inventoryValue ?? 0), currency)}</span></span>
         </div>
       )}
 
       {allGroups.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Tag className="w-4 h-4 text-slate-400" />
-          <select
+          <Selector
+            label="Product group"
+            isLabelHidden
+            size="sm"
             value={selectedGroup}
-            onChange={(e) => setSelectedGroup(e.target.value)}
-            className="rounded-lg bg-slate-800 border border-slate-700 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none"
-          >
-            <option value="all">All groups</option>
-            {allGroups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
+            onChange={setSelectedGroup}
+            options={[{ value: "all", label: "All groups" }, ...allGroups.map((g) => ({ value: g.id, label: g.name }))]}
+          />
         </div>
       )}
 
@@ -404,6 +434,7 @@ export function Dashboard() {
                   setEditQty={setEditQty}
                   setEditUnit={setEditUnit}
                   onStartEdit={() => startEdit(row)}
+                  onEditProduct={() => setEditProduct(row)}
                   onCancelEdit={cancelEdit}
                   onSaveEdit={() => saveEdit(row)}
                   onQuickAdjust={(d) => quickAdjust(row, d)}
@@ -439,6 +470,7 @@ export function Dashboard() {
                   setEditQty={setEditQty}
                   setEditUnit={setEditUnit}
                   onStartEdit={() => startEdit(row)}
+                  onEditProduct={() => setEditProduct(row)}
                   onCancelEdit={cancelEdit}
                   onSaveEdit={() => saveEdit(row)}
                   onQuickAdjust={(d) => quickAdjust(row, d)}
@@ -491,6 +523,28 @@ export function Dashboard() {
           )}
         </>
       )}
+
+      <ProductEditorDialog
+        open={!!editProduct}
+        product={editProduct ? {
+          id: editProduct.product_id,
+          name: editProduct.product_name,
+          category: editProduct.category,
+          brand: editProduct.brand,
+          default_unit: editProduct.unit,
+          barcode: editProduct.barcode,
+          image_url: editProduct.image_url,
+          product_group_id: editProduct.product_group_id,
+        } : {
+          id: "", name: "", category: null, brand: null,
+          default_unit: "pcs", barcode: null, image_url: null, product_group_id: null,
+        }}
+        tags={tagList}
+        groups={allGroups}
+        onOpenChange={(v) => { if (!v) setEditProduct(null); }}
+        onTagsChanged={fetchTags}
+        onUpdated={fetchStock}
+      />
     </div>
   );
 }
@@ -504,6 +558,7 @@ function StockCard({
   setEditQty,
   setEditUnit,
   onStartEdit,
+  onEditProduct,
   onCancelEdit,
   onSaveEdit,
   onQuickAdjust,
@@ -522,6 +577,7 @@ function StockCard({
   setEditQty: (v: number) => void;
   setEditUnit: (v: string) => void;
   onStartEdit: () => void;
+  onEditProduct: () => void;
   onCancelEdit: () => void;
   onSaveEdit: () => void;
   onQuickAdjust: (d: number) => void;
@@ -541,44 +597,54 @@ function StockCard({
       padding={0}
       variant={isLow && isUrgent ? "red" : isLow && isWarning ? "orange" : "default"}
     >
-      <div className="p-3 flex items-center gap-3">
+      <div className="p-3 md:p-4 flex items-center gap-3">
         {visibleFields.includes("image") && (
           <Thumbnail
             src={row.image_url || FALLBACK_IMG}
             alt={row.product_name}
             label={row.product_name}
-            className="w-10 h-10"
+            className="w-10 h-10 md:w-11 md:h-11"
           />
         )}
 
-        <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onEditProduct}
+          className="min-w-0 flex-1 text-left group"
+        >
           {visibleFields.includes("name") && (
-            <p className="font-medium text-sm truncate">{row.product_name}</p>
+            <p className="font-medium text-sm truncate group-hover:text-emerald-400 transition">
+              {row.product_name}
+            </p>
           )}
           {visibleFields.includes("category") && (
             <p className="text-xs text-slate-500 truncate">
               {row.category || "\u00a0"}
             </p>
           )}
-        </div>
+        </button>
 
         {isEditing ? (
-          <div className="flex items-center gap-1.5 shrink-0">
-            <input
-              type="number"
-              step="any"
-              min="0"
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+            <NumberInput
+              label="Quantity"
+              isLabelHidden
+              size="sm"
+              min={0}
               value={editQty}
-              onChange={(e) => setEditQty(Number(e.target.value))}
-              className="w-16 rounded bg-slate-800 px-2 py-1 text-sm text-right border border-slate-700"
+              onChange={(v) => setEditQty(v ?? 0)}
+              width={80}
             />
-            <input
+            <TextInput
+              label="Unit"
+              isLabelHidden
+              size="sm"
               value={editUnit}
-              onChange={(e) => setEditUnit(e.target.value)}
-              className="w-12 rounded bg-slate-800 px-2 py-1 text-sm border border-slate-700"
+              onChange={setEditUnit}
+              width={72}
             />
             <Button
-              label={saving ? "..." : "Save"}
+              label="Save"
               size="sm"
               variant="primary"
               isLoading={saving}
@@ -592,16 +658,16 @@ function StockCard({
             />
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
             <IconButton
               icon={<Minus className="w-3 h-3" />}
               label="Use 1"
               size="sm"
               onClick={() => onQuickAdjust(-1)}
             />
-            <button onClick={onStartEdit} className="text-right hover:text-emerald-400 transition">
-              <p className="text-sm font-medium">{row.quantity}</p>
-              <p className="text-[10px] text-slate-500 -mt-0.5">{row.unit}</p>
+            <button onClick={onStartEdit} className="text-right hover:text-emerald-400 transition px-1" aria-label={`Edit ${row.product_name} quantity`}>
+              <p className="text-sm font-semibold leading-none">{row.quantity}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{row.unit}</p>
             </button>
             <IconButton
               icon={<Plus className="w-3 h-3" />}
@@ -613,6 +679,7 @@ function StockCard({
               icon={<Trash2 className="w-3 h-3" />}
               label="Delete item"
               size="sm"
+              variant="destructive"
               onClick={onDelete}
             />
           </div>
@@ -620,7 +687,7 @@ function StockCard({
       </div>
 
       {!isEditing && (
-        <div className="px-3 pb-2 flex items-center gap-2 flex-wrap">
+        <div className="px-3 md:px-4 pb-2 md:pb-3 flex items-center gap-x-4 gap-y-2 flex-wrap">
           {visibleFields.includes("days_left") && row.estimated_days_remaining !== null && (
             <span className={"text-xs flex items-center gap-1 " + (isUrgent ? "text-red-400" : "text-amber-400")}>
               <StatusDot variant={isUrgent ? "error" : "warning"} label={isUrgent ? "Urgent" : "Low"} />
@@ -633,16 +700,17 @@ function StockCard({
               {activatingLocation === row.stock_item_id ? (
                 <span className="text-slate-400">Saving...</span>
               ) : (
-                <select
-                  value={row.location_name ? row.location_name : ""}
-                  onChange={(e) => onAssignLocation(e.target.value || null)}
-                  className="bg-transparent border-none text-xs text-slate-400 cursor-pointer outline-none"
-                >
-                  <option value="">{row.location_name || "No location"}</option>
-                  {locations.map((l) => (
-                    <option key={l.id} value={l.id} selected={row.location_name === l.name}>{l.name}</option>
-                  ))}
-                </select>
+                <Selector
+                  label="Location"
+                  isLabelHidden
+                  size="sm"
+                  value={row.location_id ?? ""}
+                  onChange={(v) => onAssignLocation(v || null)}
+                  options={[
+                    { value: "", label: "No location" },
+                    ...locations.map((l) => ({ value: l.id, label: l.name })),
+                  ]}
+                />
               )}
             </span>
           )}

@@ -8,7 +8,7 @@ import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Theme theme={neutralTheme}>
+    <Theme theme={neutralTheme} mode="dark">
       <AuthGate>
         <App />
       </AuthGate>

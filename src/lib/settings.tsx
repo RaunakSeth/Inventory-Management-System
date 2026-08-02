@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { supabase } from "./supabase";
+import type { CurrencyCode } from "./currency";
 
 export type AIProvider = "gemini" | "openai_compatible" | "none";
 
@@ -44,6 +45,8 @@ export interface UserSettings {
   notifications_expiring: boolean;
   notifications_days_before_expiry: number;
   visible_fields: FieldId[];
+  currency: CurrencyCode;
+  base_currency: CurrencyCode;
 }
 
 interface SettingsContextValue {
@@ -70,6 +73,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     notifications_expiring: true,
     notifications_days_before_expiry: 3,
     visible_fields: DEFAULT_VISIBLE_FIELDS,
+    currency: "USD",
+    base_currency: "USD",
   });
   const [loading, setLoading] = useState(true);
 

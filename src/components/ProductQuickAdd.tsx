@@ -7,6 +7,7 @@ import type { ProductLookupResult, Store, QuantityUnit } from "../lib/types";
 import { Button } from "@astryxdesign/core/Button";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
+import { Selector } from "@astryxdesign/core/Selector";
 import { Spinner } from "@astryxdesign/core/Spinner";
 
 interface Props {
@@ -169,13 +170,14 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
               className="w-full"
             />
           </div>
-          <div className="flex gap-2">
-            <button onClick={identifyFromCamera} className="flex-1 py-2 rounded-lg bg-emerald-500 text-sm">
-              Snap & identify
-            </button>
-            <button onClick={() => fileRef.current?.click()} className="py-2 px-3 rounded-lg bg-slate-800 text-sm">
-              Upload
-            </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              label="Snap & identify"
+              variant="primary"
+              onClick={identifyFromCamera}
+              width="100%"
+            />
+            <Button label="Upload" variant="secondary" onClick={() => fileRef.current?.click()} />
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
           </div>
           {imageUrl && <img src={imageUrl} alt="Preview" className="w-16 h-16 rounded object-cover" />}
@@ -197,24 +199,23 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
             placeholder="Product name"
             isRequired
           />
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row sm:gap-2">
             <TextInput label="Category" value={category} onChange={setCategory} placeholder="Grains, Dairy..." />
             <TextInput label="Brand" value={brand} onChange={setBrand} />
           </div>
-          <div className="flex gap-2">
-            <label className="flex-1 text-sm">
-              Unit
-              <select
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+          <div className="flex flex-col sm:flex-row sm:gap-2">
+            <div className="flex-1">
+              <Selector
+                label="Unit"
                 value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-              >
-                {units.map((u) => (
-                  <option key={u.id} value={u.name}>{u.name}</option>
-                ))}
-                <option value="pcs">pcs</option>
-              </select>
-            </label>
+                onChange={setUnit}
+                options={[
+                  ...units.map((u) => ({ value: u.name, label: u.name })),
+                  ...(units.some((u) => u.name === "pcs") ? [] : [{ value: "pcs", label: "pcs" }]),
+                ]}
+                width="100%"
+              />
+            </div>
             <NumberInput
               label="Qty to add"
               value={quantity}
@@ -237,20 +238,18 @@ export function ProductQuickAdd({ barcode, onDone }: Props) {
               onChange={(e) => setBestBeforeDate(e.target.value)}
             />
           </label>
-          <div className="flex gap-2">
-            <label className="flex-1 text-sm">
-              Store (optional)
-              <select
-                className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+          <div className="flex flex-col sm:flex-row sm:gap-2">
+            <div className="flex-1">
+              <Selector
+                label="Store (optional)"
                 value={storeId}
-                onChange={(e) => setStoreId(e.target.value)}
-              >
-                <option value="">None</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </label>
+                onChange={(v) => setStoreId(v ?? "")}
+                hasClear
+                placeholder="None"
+                options={stores.map((s) => ({ value: s.id, label: s.name }))}
+                width="100%"
+              />
+            </div>
             <NumberInput
               label="Unit price (optional)"
               value={unitPrice ? Number(unitPrice) : null}

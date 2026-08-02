@@ -7,7 +7,7 @@ import { identifyProductFromPhoto, friendlyAIError } from "../lib/edgeFunctions"
 import { useNotifications } from "../components/Notifications";
 import { supabase } from "../lib/supabase";
 import type { ProductLookupResult, Store, QuantityUnit } from "../lib/types";
-import { TabList, Tab } from "@astryxdesign/core/TabList";
+import { SegmentedControl, SegmentedControlItem } from "@astryxdesign/core/SegmentedControl";
 import { Button } from "@astryxdesign/core/Button";
 import { TextInput } from "@astryxdesign/core/TextInput";
 import { NumberInput } from "@astryxdesign/core/NumberInput";
@@ -23,17 +23,22 @@ export function Scan() {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
 
   return (
-    <div className="p-4 space-y-4 max-w-lg mx-auto pb-24">
+    <div className="p-4 md:p-6 space-y-5 max-w-xl mx-auto pb-24">
       <div className="flex items-center gap-3 mb-2">
         <Camera className="w-6 h-6 text-emerald-400" />
         <h1 className="text-xl font-bold">Scan</h1>
       </div>
 
-      <TabList value={mode} onChange={(v) => { setMode(v as Mode); setScannedCode(null); }}>
-        <Tab id="barcode" value="barcode" label="Barcode" icon={<ScanLine className="w-4 h-4" />} />
-        <Tab id="manual" value="manual" label="Manual" icon={<PenLine className="w-4 h-4" />} />
-        <Tab id="bill" value="bill" label="Bill" icon={<Receipt className="w-4 h-4" />} />
-      </TabList>
+      <SegmentedControl
+        label="Add mode"
+        value={mode}
+        onChange={(v) => { setMode(v as Mode); setScannedCode(null); }}
+        layout="fill"
+      >
+        <SegmentedControlItem value="barcode" label="Barcode" icon={<ScanLine className="w-4 h-4" />} />
+        <SegmentedControlItem value="manual" label="Manual" icon={<PenLine className="w-4 h-4" />} />
+        <SegmentedControlItem value="bill" label="Bill" icon={<Receipt className="w-4 h-4" />} />
+      </SegmentedControl>
 
       {mode === "barcode" &&
         (scannedCode ? (
@@ -151,7 +156,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="max-w-sm mx-auto space-y-3 rounded-xl bg-slate-900 p-4">
+    <div className="max-w-sm mx-auto space-y-4 rounded-xl bg-slate-900 p-4 md:p-5">
       <p className="text-sm font-medium text-slate-300">Add product manually</p>
 
       <TextInput
@@ -162,25 +167,24 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         isRequired
       />
 
-      <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:gap-3">
         <TextInput label="Category" value={category} onChange={setCategory} placeholder="Produce, Cleaning..." />
         <TextInput label="Brand" value={brand} onChange={setBrand} />
       </div>
 
-      <div className="flex gap-2">
-        <label className="flex-1 text-sm">
-          Unit
-          <select
-            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+      <div className="flex flex-col sm:flex-row sm:gap-3">
+        <div className="flex-1">
+          <Selector
+            label="Unit"
             value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-          >
-            {units.map((u) => (
-              <option key={u.id} value={u.name}>{u.name}</option>
-            ))}
-            <option value="pcs">pcs</option>
-          </select>
-        </label>
+            onChange={setUnit}
+            options={[
+              ...units.map((u) => ({ value: u.name, label: u.name })),
+              ...(units.some((u) => u.name === "pcs") ? [] : [{ value: "pcs", label: "pcs" }]),
+            ]}
+            width="100%"
+          />
+        </div>
         <NumberInput
           label="Qty"
           value={quantity}
@@ -205,20 +209,18 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         />
       </label>
 
-      <div className="flex gap-2">
-        <label className="flex-1 text-sm">
-          Store (optional)
-          <select
-            className="w-full mt-1 rounded bg-slate-800 px-2 py-1"
+      <div className="flex flex-col sm:flex-row sm:gap-3">
+        <div className="flex-1">
+          <Selector
+            label="Store (optional)"
             value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
-          >
-            <option value="">None</option>
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </label>
+            onChange={(v) => setStoreId(v ?? "")}
+            hasClear
+            placeholder="None"
+            options={stores.map((s) => ({ value: s.id, label: s.name }))}
+            width="100%"
+          />
+        </div>
         <label className="flex-1 text-sm">
           Unit price (optional)
           <input
@@ -233,7 +235,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
         </label>
       </div>
 
-      <div className="space-y-1">
+      <div className="space-y-2">
         <p className="text-sm text-slate-400">Photo (optional)</p>
         <div className="rounded-lg overflow-hidden bg-black">
           <Webcam
@@ -243,7 +245,7 @@ function ManualAdd({ onDone }: { onDone: () => void }) {
             className="w-full"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-3">
           <Button
             label={stage === "identifying" ? "Identifying..." : "Snap & identify"}
             variant="primary"

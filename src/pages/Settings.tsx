@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSettings, type AIProvider } from "../lib/settings";
+import { useCurrency, CURRENCIES } from "../lib/currency";
 import { useNotifications } from "../components/Notifications";
 import { supabase } from "../lib/supabase";
 import type { Store, QuantityUnit, ProductGroup } from "../lib/types";
@@ -11,7 +12,7 @@ import { NumberInput } from "@astryxdesign/core/NumberInput";
 import { Section } from "@astryxdesign/core/Section";
 import { List, ListItem } from "@astryxdesign/core/List";
 import { Selector, SelectorOption } from "@astryxdesign/core/Selector";
-import { Settings, Key, Bell, Save, ExternalLink, Check, Zap, Loader2, ChevronDown, Store as StoreIcon, Package, Tag, Plus, Trash2 } from "lucide-react";
+import { Settings, Bell, Save, ExternalLink, Check, Zap, Loader2, Store as StoreIcon, Package, Tag, Plus, Trash2, Coins, LogOut, UserCircle2 } from "lucide-react";
 
 interface ProviderCard {
   id: string;
@@ -168,6 +169,7 @@ function detectProvider(apiKey: string, baseUrl: string): string | null {
 export default function SettingsPage() {
   const { settings, loading, updateSettings } = useSettings();
   const { addNotification } = useNotifications();
+  const { currency, setCurrency, baseCurrency, setBaseCurrency } = useCurrency();
   const [saving, setSaving] = useState(false);
   const [apiKey, setApiKey] = useState(settings.ai_api_key ?? "");
   const [baseUrl, setBaseUrl] = useState(settings.ai_base_url ?? "");
@@ -355,14 +357,14 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-lg mx-auto pb-24 pt-4 flex items-center justify-center h-64">
+      <div className="max-w-xl mx-auto pb-24 pt-4 px-4 flex items-center justify-center h-64">
         <div className="text-slate-400">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-6 pb-24 pt-4">
+    <div className="max-w-xl mx-auto space-y-6 pb-24 pt-4 px-4 md:px-6 md:pt-6">
       <div className="flex items-center gap-2">
         <Settings className="w-5 h-5 text-emerald-400" />
         <h1 className="text-xl font-bold">Settings</h1>
@@ -456,29 +458,31 @@ export default function SettingsPage() {
                   )}
 
                   {p.id === "ollama" ? (
-                    <input
-                      type="text"
+                    <TextInput
+                      label="Server URL"
                       value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value)}
+                      onChange={setBaseUrl}
                       placeholder="http://192.168.1.5:11434/v1"
-                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                      width="100%"
                     />
                   ) : (
-                    <input
+                    <TextInput
                       type="password"
+                      label="API key"
                       value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
+                      onChange={setApiKey}
                       placeholder={settings.ai_api_key ? "•••••••• (key saved)" : p.keyPlaceholder}
-                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                      width="100%"
                     />
                   )}
 
                   {p.id !== "ollama" && p.id !== "gemini" && (
-                    <input
-                      type="text"
+                    <TextInput
+                      label="Base URL (advanced)"
                       value={baseUrl}
-                      onChange={(e) => setBaseUrl(e.target.value)}
-                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs text-slate-400 focus:border-emerald-500 focus:outline-none"
+                      onChange={setBaseUrl}
+                      placeholder="https://api.example.com/v1"
+                      width="100%"
                     />
                   )}
 
@@ -489,47 +493,45 @@ export default function SettingsPage() {
                       Fetching available models...
                     </div>
                   ) : displayModels.length > 0 ? (
-                    <div className="space-y-1">
-                      <div className="relative">
-                        <select
-                          value={showCustomModel ? "__custom__" : model}
-                          onChange={(e) => {
-                            if (e.target.value === "__custom__") {
-                              setShowCustomModel(true);
-                              setModel("");
-                            } else {
-                              setShowCustomModel(false);
-                              setModel(e.target.value);
-                            }
-                          }}
-                          className="w-full appearance-none rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 pr-8 text-sm focus:border-emerald-500 focus:outline-none"
-                        >
-                          {displayModels.map((m) => (
-                            <option key={m} value={m}>
-                              {m}
-                            </option>
-                          ))}
-                          <option value="__custom__">Custom model name...</option>
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      </div>
+                    <div className="space-y-2">
+                      <Selector
+                        label="Model"
+                        value={showCustomModel ? "__custom__" : model}
+                        onChange={(v) => {
+                          if (v === "__custom__") {
+                            setShowCustomModel(true);
+                            setModel("");
+                          } else {
+                            setShowCustomModel(false);
+                            setModel(v);
+                          }
+                        }}
+                        options={[
+                          ...(model && !displayModels.includes(model)
+                            ? [{ value: model, label: model }]
+                            : []),
+                          ...displayModels.map((m) => ({ value: m, label: m })),
+                          { value: "__custom__", label: "Custom model name..." },
+                        ]}
+                        width="100%"
+                      />
                       {showCustomModel && (
-                        <input
-                          type="text"
+                        <TextInput
+                          label="Model name"
                           value={model}
-                          onChange={(e) => setModel(e.target.value)}
+                          onChange={setModel}
                           placeholder="Enter model name"
-                          className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                          width="100%"
                         />
                       )}
                     </div>
                   ) : (
-                    <input
-                      type="text"
+                    <TextInput
+                      label="Model"
                       value={model}
-                      onChange={(e) => setModel(e.target.value)}
+                      onChange={setModel}
                       placeholder="Model name"
-                      className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                      width="100%"
                     />
                   )}
 
@@ -556,6 +558,34 @@ export default function SettingsPage() {
         width="100%"
       />
 
+      {/* Currency */}
+      <Section variant="muted" padding={4}>
+        <div className="flex items-center gap-2 mb-3">
+          <Coins className="w-4 h-4" />
+          <h2 className="font-semibold">Currency</h2>
+        </div>
+        <p className="text-xs text-slate-400 mb-2">
+          Prices are shown in your chosen currency, converted live when needed. Stored prices were entered
+          in the base currency below — change it once if your prices were recorded in a different currency.
+        </p>
+        <Selector
+          label="Currency"
+          value={currency}
+          onChange={(v) => { if (v) setCurrency(v as typeof currency); }}
+          options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
+          width="100%"
+        />
+        <div className="mt-3">
+          <Selector
+            label="Base currency (how prices are stored)"
+            value={baseCurrency}
+            onChange={(v) => { if (v) setBaseCurrency(v as typeof baseCurrency); }}
+            options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
+            width="100%"
+          />
+        </div>
+      </Section>
+
       {/* Notifications */}
       <Section variant="muted" padding={4}>
         <div className="flex items-center gap-2 mb-3">
@@ -563,35 +593,37 @@ export default function SettingsPage() {
           <h2 className="font-semibold">Notifications</h2>
         </div>
 
-        <label className="flex items-center justify-between">
-          <span className="text-sm text-slate-300">Low stock alerts</span>
-          <Switch
-            label="Low stock alerts"
-            value={settings.notifications_low_stock}
-            onChange={(checked) => handleSaveNotifications({ notifications_low_stock: checked })}
-            isLabelHidden
-          />
-        </label>
+        <div className="space-y-4">
+          <label className="flex items-center justify-between gap-4">
+            <span className="text-sm text-slate-300">Low stock alerts</span>
+            <Switch
+              label="Low stock alerts"
+              value={settings.notifications_low_stock}
+              onChange={(checked) => handleSaveNotifications({ notifications_low_stock: checked })}
+              isLabelHidden
+            />
+          </label>
 
-        <label className="flex items-center justify-between">
-          <span className="text-sm text-slate-300">Expiration warnings</span>
-          <Switch
-            label="Expiration warnings"
-            value={settings.notifications_expiring}
-            onChange={(checked) => handleSaveNotifications({ notifications_expiring: checked })}
-            isLabelHidden
-          />
-        </label>
+          <label className="flex items-center justify-between gap-4">
+            <span className="text-sm text-slate-300">Expiration warnings</span>
+            <Switch
+              label="Expiration warnings"
+              value={settings.notifications_expiring}
+              onChange={(checked) => handleSaveNotifications({ notifications_expiring: checked })}
+              isLabelHidden
+            />
+          </label>
 
-        {settings.notifications_expiring && (
-          <NumberInput
-            label="Days before expiry to warn"
-            value={settings.notifications_days_before_expiry}
-            onChange={(val) => handleSaveNotifications({ notifications_days_before_expiry: val ?? 3 })}
-            min={1}
-            max={30}
-          />
-        )}
+          {settings.notifications_expiring && (
+            <NumberInput
+              label="Days before expiry to warn"
+              value={settings.notifications_days_before_expiry}
+              onChange={(val) => handleSaveNotifications({ notifications_days_before_expiry: val ?? 3 })}
+              min={1}
+              max={30}
+            />
+          )}
+        </div>
       </Section>
 
       {/* Stores */}
@@ -612,10 +644,12 @@ export default function SettingsPage() {
             />
           ))}
         </List>
-        <div className="flex gap-2 mt-3">
-          <TextInput label="" isLabelHidden value={newStoreName} onChange={setNewStoreName} placeholder="Store name" size="sm" />
-          <TextInput label="" isLabelHidden value={newStoreAddress} onChange={setNewStoreAddress} placeholder="Address (optional)" size="sm" />
-          <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newStoreName.trim()} onClick={addStore} />
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <TextInput label="" isLabelHidden value={newStoreName} onChange={setNewStoreName} placeholder="Store name" size="sm" />
+            <TextInput label="" isLabelHidden value={newStoreAddress} onChange={setNewStoreAddress} placeholder="Address (optional)" size="sm" />
+          </div>
+          <Button label="Add store" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newStoreName.trim()} onClick={addStore} className="self-start" />
         </div>
       </Section>
 
@@ -633,10 +667,12 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
-        <div className="flex gap-2 mt-3">
-          <TextInput label="" isLabelHidden value={newUnitName} onChange={setNewUnitName} placeholder="Unit (e.g. kg)" size="sm" />
-          <TextInput label="" isLabelHidden value={newUnitPlural} onChange={setNewUnitPlural} placeholder="Plural (optional)" size="sm" />
-          <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newUnitName.trim()} onClick={addUnit} />
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <TextInput label="" isLabelHidden value={newUnitName} onChange={setNewUnitName} placeholder="Unit (e.g. kg)" size="sm" />
+            <TextInput label="" isLabelHidden value={newUnitPlural} onChange={setNewUnitPlural} placeholder="Plural (optional)" size="sm" />
+          </div>
+          <Button label="Add unit" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newUnitName.trim()} onClick={addUnit} className="self-start" />
         </div>
       </Section>
 
@@ -657,10 +693,30 @@ export default function SettingsPage() {
             />
           ))}
         </List>
-        <div className="flex gap-2 mt-3">
+        <div className="mt-3 flex flex-col gap-2">
           <TextInput label="" isLabelHidden value={newGroupName} onChange={setNewGroupName} placeholder="Group name" size="sm" />
-          <Button label="Add" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newGroupName.trim()} onClick={addGroup} />
+          <Button label="Add group" variant="primary" size="sm" icon={<Plus className="w-4 h-4" />} isDisabled={!newGroupName.trim()} onClick={addGroup} className="self-start" />
         </div>
+      </Section>
+
+      {/* Account / Sign out */}
+      <Section variant="muted" padding={4}>
+        <div className="flex items-center gap-2 mb-3">
+          <UserCircle2 className="w-4 h-4" />
+          <h2 className="font-semibold">Account</h2>
+        </div>
+        <p className="text-xs text-slate-400 mb-3">
+          Sign out of this device. Your data stays safe in the cloud until you sign back in.
+        </p>
+        <Button
+          label="Sign out"
+          variant="destructive"
+          icon={<LogOut className="w-4 h-4" />}
+          onClick={async () => {
+            await supabase.auth.signOut();
+            addNotification({ type: "success", title: "Signed out", message: "You have been signed out.", duration: 4000 });
+          }}
+        />
       </Section>
     </div>
   );

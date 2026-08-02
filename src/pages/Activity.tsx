@@ -6,6 +6,7 @@ import { EmptyState } from "@astryxdesign/core/EmptyState";
 import { Banner } from "@astryxdesign/core/Banner";
 import { Skeleton } from "@astryxdesign/core/Skeleton";
 import { Thumbnail } from "@astryxdesign/core/Thumbnail";
+import { Selector } from "@astryxdesign/core/Selector";
 import { History, Filter, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Txn {
@@ -64,7 +65,7 @@ export function Activity() {
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="p-4 space-y-4 max-w-2xl mx-auto pb-24">
+    <div className="p-4 md:p-6 space-y-5 max-w-4xl mx-auto pb-24">
       <div className="flex items-center gap-3">
         <History className="w-6 h-6 text-emerald-400" />
         <h1 className="text-xl font-bold">Activity Log</h1>
@@ -75,19 +76,22 @@ export function Activity() {
         <Banner status="error" title={errorMsg} isDismissable onDismiss={() => setErrorMsg(null)} />
       )}
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <Filter className="w-4 h-4 text-slate-500" />
-        <select
+        <Selector
+          label="Filter by type"
+          isLabelHidden
+          size="sm"
           value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value); setPage(0); }}
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-sm border border-slate-700"
-        >
-          <option value="all">All types</option>
-          <option value="restock">Restock</option>
-          <option value="usage">Usage</option>
-          <option value="adjustment">Adjustment</option>
-          <option value="bill_scan">Bill scan</option>
-        </select>
+          onChange={(v) => { setTypeFilter(v ?? "all"); setPage(0); }}
+          options={[
+            { value: "all", label: "All types" },
+            { value: "restock", label: "Restock" },
+            { value: "usage", label: "Usage" },
+            { value: "adjustment", label: "Adjustment" },
+            { value: "bill_scan", label: "Bill scan" },
+          ]}
+        />
       </div>
 
       {loading ? (
@@ -108,7 +112,7 @@ export function Activity() {
             const p = t.stock_items?.product_library;
             const isAdd = t.quantity_change > 0;
             return (
-              <div key={t.id} className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 py-2.5 border border-slate-800/30">
+              <div key={t.id} className="flex items-center gap-3 bg-slate-900/50 rounded-lg px-3 md:px-4 py-3 border border-slate-800/30">
                 <Thumbnail
                   src={p?.image_url || FALLBACK_IMG}
                   alt={p?.name ?? ""}

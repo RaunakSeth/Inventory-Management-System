@@ -1,11 +1,21 @@
+@layer reset, tailwind-base, astryx-base, astryx-theme, tailwind-components, tailwind-utilities;
+
 @import "@astryxdesign/core/reset.css";
 @import "@astryxdesign/core/astryx.css";
 @import "@astryxdesign/theme-neutral/theme.css";
 
-@layer tailwind {
+@layer tailwind-base {
   @tailwind base;
+}
+@layer tailwind-components {
   @tailwind components;
+}
+@layer tailwind-utilities {
   @tailwind utilities;
+}
+
+html {
+  color-scheme: dark;
 }
 
 @keyframes slide-in {

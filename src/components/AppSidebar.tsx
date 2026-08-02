@@ -1,10 +1,7 @@
-import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { SideNav } from "@astryxdesign/core/SideNav";
-import { SideNavItem } from "@astryxdesign/core/SideNav";
-import { SideNavSection } from "@astryxdesign/core/SideNav";
-import { SideNavHeading } from "@astryxdesign/core/SideNav";
+import { SideNav, SideNavItem, SideNavSection, SideNavHeading } from "@astryxdesign/core/SideNav";
 import { Switch } from "@astryxdesign/core/Switch";
+import { useAppShellMobile } from "@astryxdesign/core/AppShell";
 import { useSettings, ALL_FIELDS, type FieldId } from "../lib/settings";
 import {
   MapPin, ShoppingCart, History, Settings,
@@ -12,8 +9,6 @@ import {
 } from "lucide-react";
 
 interface AppSidebarProps {
-  open: boolean;
-  onClose: () => void;
   showFieldVisibility?: boolean;
 }
 
@@ -27,18 +22,12 @@ const NAV_ITEMS = [
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function AppSidebar({ open, onClose, showFieldVisibility = false }: AppSidebarProps) {
+const toHref = (to: string) => (to === "/" ? "#/" : `#${to}`);
+
+export function AppSidebar({ showFieldVisibility = false }: AppSidebarProps) {
   const { pathname } = useLocation();
   const { settings, updateSettings } = useSettings();
-
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  const { closeMobileNav } = useAppShellMobile();
 
   function toggleField(fieldId: FieldId) {
     const current = settings.visible_fields;
@@ -49,63 +38,50 @@ export function AppSidebar({ open, onClose, showFieldVisibility = false }: AppSi
   }
 
   return (
-    <>
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
-          onClick={onClose}
-        />
-      )}
-      <div
-        className={`fixed top-0 left-0 bottom-0 w-72 z-50 transform transition-transform duration-200 ease-out ${
-          open ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        <SideNav
-          header={
-            <SideNavHeading heading="Inventory Management" icon={<Package className="w-5 h-5" />} />
-          }
-        >
-          <SideNavSection title="Navigation" isHeaderHidden>
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <SideNavItem
-                  key={item.to}
-                  label={item.label}
-                  icon={<Icon className="w-4 h-4" />}
-                  isSelected={pathname === item.to}
-                  onClick={() => { onClose(); window.location.hash = item.to === "/" ? "#" : `#${item.to}`; }}
-                />
-              );
-            })}
-          </SideNavSection>
+    <SideNav
+      header={
+        <SideNavHeading heading="Inventory Management" icon={<Package className="w-5 h-5" />} />
+      }
+    >
+      <SideNavSection title="Navigation" isHeaderHidden>
+        {NAV_ITEMS.map((item) => {
+          const Icon = item.icon;
+          return (
+            <SideNavItem
+              key={item.to}
+              label={item.label}
+              icon={<Icon className="w-4 h-4" />}
+              isSelected={pathname === item.to}
+              href={toHref(item.to)}
+              onClick={closeMobileNav}
+            />
+          );
+        })}
+      </SideNavSection>
 
-          {showFieldVisibility && (
-            <SideNavSection
-              title="Visible fields"
-              subtitle="Choose what to show on stock cards"
-            >
-              {ALL_FIELDS.map((f) => (
-                <SideNavItem
-                  key={f.id}
+      {showFieldVisibility && (
+        <SideNavSection
+          title="Visible fields"
+          subtitle="Choose what to show on stock cards"
+        >
+          {ALL_FIELDS.map((f) => (
+            <SideNavItem
+              key={f.id}
+              label={f.label}
+              icon={<SlidersHorizontal className="w-4 h-4" />}
+              endContent={
+                <Switch
                   label={f.label}
-                  icon={<SlidersHorizontal className="w-4 h-4" />}
-                  endContent={
-                    <Switch
-                      label={f.label}
-                      isLabelHidden
-                      value={settings.visible_fields.includes(f.id)}
-                      onChange={() => toggleField(f.id)}
-                    />
-                  }
-                  onClick={() => toggleField(f.id)}
+                  isLabelHidden
+                  value={settings.visible_fields.includes(f.id)}
+                  onChange={() => toggleField(f.id)}
                 />
-              ))}
-            </SideNavSection>
-          )}
-        </SideNav>
-      </div>
-    </>
+              }
+              onClick={() => toggleField(f.id)}
+            />
+          ))}
+        </SideNavSection>
+      )}
+    </SideNav>
   );
 }
