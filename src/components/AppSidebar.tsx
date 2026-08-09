@@ -5,7 +5,7 @@ import { useAppShellMobile } from "@astryxdesign/core/AppShell";
 import { useSettings, ALL_FIELDS, type FieldId } from "../lib/settings";
 import {
   MapPin, ShoppingCart, History, Settings,
-  LayoutDashboard, ScanLine, Package, SlidersHorizontal,
+  LayoutDashboard, ScanLine, Package, SlidersHorizontal, Barcode,
 } from "lucide-react";
 
 interface AppSidebarProps {
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/scan", label: "Scan", icon: ScanLine },
   { to: "/products", label: "Products", icon: Package },
+  { to: "/barcodes", label: "Barcodes", icon: Barcode },
   { to: "/locations", label: "Locations", icon: MapPin },
   { to: "/shopping", label: "Shopping list", icon: ShoppingCart },
   { to: "/activity", label: "Activity", icon: History },

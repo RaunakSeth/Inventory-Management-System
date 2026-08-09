@@ -32,3 +32,9 @@ html {
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
 }
+
+.barcode-img svg {
+  width: 100% !important;
+  height: auto !important;
+  display: block;
+}

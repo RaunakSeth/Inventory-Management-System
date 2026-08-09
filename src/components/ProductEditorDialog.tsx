@@ -61,6 +61,8 @@ export function ProductEditorDialog({
   const [imgFailed, setImgFailed] = useState(false);
   const [editImage, setEditImage] = useState<string | null>(product.image_url);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [linkedBarcodes, setLinkedBarcodes] = useState<{ id: string; code: string; label: string | null }[]>([]);
+  const [chosenBarcode, setChosenBarcode] = useState<string>(product.barcode ?? "");
 
   function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -81,6 +83,14 @@ export function ProductEditorDialog({
       setErrorMsg(null);
       setImgFailed(false);
       setEditImage(product.image_url);
+      setChosenBarcode(product.barcode ?? "");
+      supabase
+        .from("barcodes")
+        .select("id, code, label")
+        .eq("product_id", product.id)
+        .then(({ data }) =>
+          setLinkedBarcodes((data ?? []) as { id: string; code: string; label: string | null }[])
+        );
     }
   }, [open, product]);
 
@@ -108,6 +118,7 @@ export function ProductEditorDialog({
         brand: editBrand || null,
         product_group_id: editGroupId || null,
         image_url: editImage,
+        barcode: chosenBarcode || null,
       })
       .eq("id", product.id);
     if (error) setErrorMsg(error.message);
@@ -234,6 +245,52 @@ export function ProductEditorDialog({
                   {product.barcode}
                 </p>
               )}
+
+              <div className="pt-2 border-t border-slate-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <Barcode className="w-3 h-3 text-slate-400" />
+                  <span className="text-xs text-slate-400">Barcode to use</span>
+                </div>
+                {linkedBarcodes.length === 0 && !product.barcode ? (
+                  <p className="text-xs text-slate-500">
+                    No barcode yet. Generate one in the Barcode studio and link it to this product.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {product.barcode && (
+                      <button
+                        type="button"
+                        onClick={() => setChosenBarcode(product.barcode!)}
+                        className={`w-full flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ${
+                          chosenBarcode === product.barcode
+                            ? "border-emerald-400 bg-emerald-400/10"
+                            : "border-slate-700 hover:border-slate-500"
+                        }`}
+                      >
+                        <Barcode className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="text-xs font-mono text-slate-200 flex-1 truncate">{product.barcode}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500 shrink-0">Global</span>
+                      </button>
+                    )}
+                    {linkedBarcodes.map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setChosenBarcode(b.code)}
+                        className={`w-full flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors ${
+                          chosenBarcode === b.code
+                            ? "border-emerald-400 bg-emerald-400/10"
+                            : "border-slate-700 hover:border-slate-500"
+                        }`}
+                      >
+                        <Barcode className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span className="text-xs font-mono text-slate-200 flex-1 truncate">{b.code}</span>
+                        <span className="text-[10px] uppercase tracking-wide text-slate-500 shrink-0">Studio</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2 mb-1">

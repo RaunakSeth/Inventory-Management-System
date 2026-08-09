@@ -7,6 +7,7 @@ import { AppSidebar } from "./components/AppSidebar";
 import { Dashboard } from "./pages/Dashboard";
 import { Products } from "./pages/Products";
 import { Scan } from "./pages/Scan";
+import { Barcodes } from "./pages/Barcodes";
 import { Activity } from "./pages/Activity";
 import { Locations } from "./pages/Locations";
 import { ShoppingList } from "./pages/ShoppingList";
@@ -81,6 +82,7 @@ function AppLayout() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/scan" element={<Scan />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/barcodes" element={<Barcodes />} />
         <Route path="/shopping" element={<ShoppingList />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/locations" element={<Locations />} />

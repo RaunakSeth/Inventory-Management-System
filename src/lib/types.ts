@@ -103,3 +103,16 @@ export interface ShoppingListItem {
   done: boolean;
   created_at: string;
 }
+
+export interface Barcode {
+  id: string;
+  user_id: string;
+  product_id: string | null;
+  code: string;
+  format: string;
+  label: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  product?: { name: string; category: string | null } | null;
+}
