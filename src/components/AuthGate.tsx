@@ -32,6 +32,19 @@ function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254;
 }
 
+/**
+ * The URL the magic-link / confirmation emails should land on.
+ * Prefers the live site origin so it always matches whichever domain is
+ * currently serving the app (dev, staging or production). Falls back to the
+ * build-time VITE_SITE_URL when not running in a browser.
+ */
+function siteUrl(): string {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return import.meta.env.VITE_SITE_URL || "";
+}
+
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,7 +141,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       password,
       options: {
         data: { username: cleanUsername },
-        emailRedirectTo: import.meta.env.VITE_SITE_URL,
+        emailRedirectTo: siteUrl(),
       },
     });
 
@@ -158,7 +171,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
     await supabase.auth.signInWithOtp({
       email: cleanEmail,
-      options: { emailRedirectTo: import.meta.env.VITE_SITE_URL },
+      options: { emailRedirectTo: siteUrl() },
     });
     setSending(false);
     setMode("magic_link_sent");
